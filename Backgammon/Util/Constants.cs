@@ -1,14 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Backgammon.Util
+﻿namespace Backgammon.Util
 {
     public static class Constants
     {
         public const bool MirrorBoardForPlayer2 = true;
+        // We are evaluating winning chances from between 0 to 1
+        public const float EvaluationMax = 1f;
+        public const float EvaluationMin = 0f;
 
         public enum PositionType
         {
@@ -17,8 +14,10 @@ namespace Backgammon.Util
             Backgame12,
             Backgame13,
             Backgame23,
-            OtherBackgame
-            // Add more models as needed
+            OtherBackgame,
+            FivePrime,
+            SixPrime,
+            BearOffDatabase
         }
     }
 }

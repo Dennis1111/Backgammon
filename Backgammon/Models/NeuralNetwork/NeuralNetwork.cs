@@ -11,6 +11,7 @@ namespace Backgammon.Models.NeuralNetwork
         [JsonProperty]
         private readonly List<Layer> Layers = [];
         private float[]? InitialInputs { get; set; }
+        private string[]? _inputLabels;
         public string Description { get; set; } = "NeuralNetwork";
         public string LogfilePath { get; set; }
         public string DetfaultfilePath { get; set; } = "";
@@ -27,6 +28,11 @@ namespace Backgammon.Models.NeuralNetwork
 
         public void Save() {
             Save(DetfaultfilePath);
+        }
+
+        public void SetInputLabels(string[] inputLabels)
+        {
+            _inputLabels = inputLabels;
         }
 
         //A little uggly but for now we just want some history
@@ -216,12 +222,18 @@ namespace Backgammon.Models.NeuralNetwork
 
         public void CheckForwardTime()
         {
+            Console.WriteLine($"Checking forward Time, "+ Description);
+            var averageTotalMilliSeconds = 0.0;
             foreach (var layer in Layers)
             {
                 double seconds = (double)layer.ForwardTime / Stopwatch.Frequency;
+                double averageMillis = 1000 * seconds / layer.ForwardCount;
                 Console.WriteLine($"Layer forward time: {seconds} sec");
-                Console.WriteLine($"Average time: {1000*seconds/layer.ForwardCount} millisec");
+                Console.WriteLine($"Average time: {averageMillis} millisec");
+                averageTotalMilliSeconds += averageMillis;
             }
+
+            Console.WriteLine($"Network  average forward time: {averageTotalMilliSeconds} millisec");
         }
 
         public void CheckDeadInputs()
@@ -293,12 +305,12 @@ namespace Backgammon.Models.NeuralNetwork
             }
         }
 
-        public void checkMaxFeatureRelevance(string[] labels)
+        public void checkMaxFeatureRelevance()
         {
             // Assuming that an input has high importance if its weights to other neurons have increased
             var layer = Layers[0];
             var weights = layer.Weights;
-            Console.WriteLine("\nChecking feature Max" + labels.Length);
+            Console.WriteLine("\nChecking feature Max" + _inputLabels!.Length);
             var inputMaxOfWeights = new float[weights.GetLength(0)];
 
             for (int input = 0; input < weights.GetLength(0); input++)
@@ -313,9 +325,9 @@ namespace Backgammon.Models.NeuralNetwork
             // Create a list of tuples to store labels and their corresponding max weights
             var labeledWeights = new List<(string label, float maxWeight)>();
 
-            for (int input = 0; input < labels.Length; input++)
+            for (int input = 0; input < _inputLabels.Length; input++)
             {
-                labeledWeights.Add((labels[input], inputMaxOfWeights[input]));
+                labeledWeights.Add((_inputLabels[input], inputMaxOfWeights[input]));
             }
 
             // Sort the list in descending order based on the max weights

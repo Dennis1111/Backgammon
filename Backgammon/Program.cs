@@ -1,37 +1,37 @@
 ﻿using Backgammon.GamePlay;
 using Backgammon.Models;
-using Backgammon.Models.NeuralNetwork;
 using Backgammon.Training;
 using Backgammon.Util;
 using Backgammon.Util.AI;
-using Backgammon.Utils;
 using Newtonsoft.Json;
 using System.Diagnostics;
+using static Backgammon.Util.Constants;
 
+/*
 static void testEval(NeuralNetwork[] _neuralNetworks) {
     int[] sample = [0, -2, 2, 2, 2, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, -1, -2, -3, -1, -2, -2, 0, 0, 0, -2, 0, 0, 0];
     MinMaxUtility minMaxUtility = new MinMaxUtility();
     BackgammonBoard backgammonBoard = new BackgammonBoard();
     int currentPlayer = 1;
-    backgammonBoard.CheckerPoints = sample;
+    backgammonBoard.Position = sample;
     backgammonBoard.CurrentPlayer = currentPlayer;
     int die1 = 2;
     int die2 = 4;
     backgammonBoard.Die1 = die1;
     backgammonBoard.Die2 = die2;
     Console.WriteLine("Pos:\n" + backgammonBoard);
-    Console.WriteLine("Pos:\n" + string.Join(", ", backgammonBoard.CheckerPoints));
-    var (equals, scorev) = minMaxUtility.MinMax(backgammonBoard.CheckerPoints, currentPlayer, die1, die2, 1, _neuralNetworks);
+    Console.WriteLine("Pos:\n" + string.Join(", ", backgammonBoard.Position));
+    var (equals, scorev) = minMaxUtility.MinMax(backgammonBoard.Position, currentPlayer, die1, die2, 1, _neuralNetworks);
     Console.WriteLine("Scorev MinMax:\n" + string.Join(", ", scorev));
-    var score1 = ScoreUtility.EvaluatePosition(backgammonBoard.CheckerPoints, currentPlayer, _neuralNetworks, 0f, 1f, false,true);
+    var score1 = ScoreUtility.EvaluatePosition(backgammonBoard.Position, currentPlayer, _neuralNetworks, 0f, 1f, false,true);
     Console.WriteLine("ScoreV1 EvalPos: \n" + string.Join(", ", score1));
-    var mirroredPos = BackgammonBoard.MirrorBoard(backgammonBoard.CheckerPoints);
+    var mirroredPos = BackgammonBoard.MirrorBoard(backgammonBoard.Position);
     var score2 = ScoreUtility.EvaluatePosition(mirroredPos, BackgammonGameHelper.Opponent(currentPlayer), _neuralNetworks, 0f, 1f, false,true);
     Console.WriteLine("ScoreV2 Eval Mirrored: \n" + string.Join(", ", score2));
     // If we mirror the board and swap player Evaluate Pos should return the same!
-}
+}*/
 
-
+/*
 static void testMinMax(NeuralNetwork[] nn)
 {
     int[] sample = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, -2, 0, 13, -13];
@@ -41,8 +41,9 @@ static void testMinMax(NeuralNetwork[] nn)
     var (eq, scoreVector) = minMaxUtility.EvaluatePositionAverage(sample, player, ply, nn);
     Console.WriteLine(eq + "bear0ff SCV: " + String.Join(",", scoreVector));
     Console.WriteLine("Leafs: " + minMaxUtility.LeafCounter);
-}
+}*/
 
+/*
 static void testBearoffDatabaseMinMax(NeuralNetwork[] nn)
 {
     int[] sample = [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, -2, 0, 12, -11];
@@ -52,21 +53,22 @@ static void testBearoffDatabaseMinMax(NeuralNetwork[] nn)
     var (eq, scoreVector) = minMaxUtility.EvaluatePositionAverage(sample, player, ply, nn);
     Console.WriteLine(eq + "bear0ff" + String.Join(",", scoreVector));
     Console.WriteLine("Leafs: " + minMaxUtility.LeafCounter);
-}
+}*/
 // Retrieve the environment variable
 string dataPath = Environment.GetEnvironmentVariable("BG_DATA_PATH");
 
 var modelsDir = Path.Combine(dataPath, "neuralnets");
 Dictionary<string, float[]> bearOffDatabase = [];
+var logDir = Path.Combine(dataPath, "logs");
+//var names = NeuralNetworkManager.getModelNames();
+var positionEvaluatorDict = NeuralNetworkManager.GetBackgammonPosEvaluators(modelsDir, logDir);
+
 static string getBearOffFileName(string dir, int maxCheckers) {
     return Path.Combine(dir, "bearoff" + maxCheckers + ".json");
 }
 
-var jsonBearOffFilename = getBearOffFileName(modelsDir, BeafOffUtility.MaxCheckers);
 
-// Read the JSON string from a file
-//var createDatabase = false;
-//for (int i = BeafOffUtility.MaxCheckers; i >= 1; i--)
+var jsonBearOffFilename = getBearOffFileName(modelsDir, BearOffUtility.MaxCheckers);
 {
     try
     {
@@ -78,11 +80,12 @@ var jsonBearOffFilename = getBearOffFileName(modelsDir, BeafOffUtility.MaxChecke
         Console.WriteLine("Couldnt load bear off db");
     }
 }
+
 if (bearOffDatabase is null || bearOffDatabase.Count() == 0)
 {
     Console.WriteLine("Creating bearoff db");
     var bearOffDictSmaller = new Dictionary<string, float[]>();
-    var jsonBearOffFilenameSmaller = getBearOffFileName(modelsDir, BeafOffUtility.MaxCheckers-1);
+    var jsonBearOffFilenameSmaller = getBearOffFileName(modelsDir, BearOffUtility.MaxCheckers-1);
 
     // Read the JSON string from a file
     //var createDatabase = false;
@@ -99,33 +102,36 @@ if (bearOffDatabase is null || bearOffDatabase.Count() == 0)
         }
     }
 
-    bearOffDatabase = BeafOffUtility.CreateBearOffDataBase(bearOffDictSmaller);
+    bearOffDatabase = BearOffUtility.CreateBearOffDataBase(bearOffDictSmaller);
     string json = JsonConvert.SerializeObject(bearOffDatabase, Formatting.Indented);
     // Save the JSON string to a file
     File.WriteAllText(jsonBearOffFilename, json);
 }
 
-var logDir = Path.Combine(dataPath, "logs");
-//var names = NeuralNetworkManager.getModelNames();
-var models = NeuralNetworkManager.getNeuralNetworks(modelsDir, logDir);
+
+var bearOffEvaluator = new BearoffDatabaseEvaluator(bearOffDatabase);
+positionEvaluatorDict.Add(PositionType.BearOffDatabase, bearOffEvaluator);
+
+//var models = NeuralNetworkManager.getNeuralNetworks(modelsDir, logDir);
+
 //testEval(models);
-testMinMax(models);
+//testMinMax(models);
 var gameLogs = Path.Combine(dataPath, "logs", "games.log");
 
-var gameSimulator = new GameSimulator(models, bearOffDatabase, logDir);
+var gameSimulator = new GameSimulator(positionEvaluatorDict, logDir);
 var gameDataTrainLogs = Path.Combine(logDir, "trainData.log");
-var gameDataTrainer = new GameDataTrainer(models, bearOffDatabase, gameDataTrainLogs);
+var gameDataTrainer = new GameDataTrainer(positionEvaluatorDict, gameDataTrainLogs);
 
 var totalPlayingTime = 0L;
 var totalTrainingTime = 0L;
 
-var nrOfTrainingGames = 600;
+var nrOfTrainingGames = 2000;
 var trainFrequency = 5;
-var saveFrequency = 25;
+var saveFrequency = 100;
 var maxExtraGames = 300; // When extraTrainPositions exceeds this we dont add any more
 var inspectLearningFrequency = 20;
-var batchLearningRate = 0.02f;
-int epochs = 6;
+var batchLearningRate = 0.005f;
+int epochs = 10;
 var trainingGamesData = new List<TrainingData>[nrOfTrainingGames];
 List<(int[], int)> extraTrainPositions = [];
 int saveCounter = 0;
@@ -166,7 +172,7 @@ for (int i = 0; i < 90000; i++)
 
     trainingGamesData[i % nrOfTrainingGames] = trainData;
     Stopwatch stopwatchTrain = Stopwatch.StartNew();
-    if (i % trainFrequency == 0)
+    if (i % trainFrequency == 0 && i>100)
     {
         // Flatten the list of lists into a single list 
         // Flatten the list of lists into a single list, excluding null entries
@@ -177,23 +183,42 @@ for (int i = 0; i < 90000; i++)
         Console.WriteLine("Train on patterns:" + flatList.Count);
 
         // Partition the flat list into two lists based on ModelIndex
-        var flatLists = new List<TrainingData>[2];
-        flatLists[0] = flatList.Where(data => data.ModelIndex == 0).ToList();
-        flatLists[1] = flatList.Where(data => data.ModelIndex == 1).ToList();
+        // var flatLists = new List<TrainingData>[2];
+        
+        Dictionary<PositionType, List<TrainingData>> trainingPatternsDict = [];
+        foreach (var elem in flatList) {
+            var positionType = BackgammonBoard.MapBoardToPositionType(elem.board);
+            if (positionType != PositionType.BearOffDatabase) {
+                if (!trainingPatternsDict.ContainsKey(positionType))
+                { 
+                    trainingPatternsDict.Add(positionType, new List<TrainingData>());
+                }
+                trainingPatternsDict[positionType].Add(elem);
+            }
+        }
+
+        foreach (var positionType in trainingPatternsDict.Keys) {
+            var trainingPatterns = trainingPatternsDict[positionType];
+            var neuralNetwork = ((NeuralNetworkPositionEvaluator) positionEvaluatorDict[positionType]).NeuralNetwork;
+            Console.WriteLine("Train" +  positionType + " patterns"+ trainingPatterns.Count + ": " + neuralNetwork.DetfaultfilePath);
+            var sample = trainingPatterns[0];
+            Console.WriteLine("sample" +  string.Join(", ", sample.board));
+            Console.WriteLine("sample input" +  sample.InputData.Length);
+            neuralNetwork.BatchUpdate(trainingPatterns, epochs);
+        }
+
+        //flatLists[0] = flatList.Where(data => data.ModelIndex == 0).ToList();
+        //flatLists[1] = flatList.Where(data => data.ModelIndex == 1).ToList();
         
         // Assuming models is an array or list of your model objects
-        for (int modelIndex = 0; modelIndex < 2; modelIndex++)
+        /* for (int modelIndex = 0; modelIndex < 2; modelIndex++)
         {
             var patterns = flatLists[modelIndex].Count;
             Console.WriteLine($"Updating model {modelIndex} with {patterns} patterns.");
-            /*if (patterns > 0 && modelIndex == 1)
-            {
-                Environment.Exit(0);
-            }*/
             
             if (flatLists[modelIndex].Count > 0)
                 models[modelIndex].BatchUpdate(flatLists[modelIndex], epochs);
-        }
+        }*/
     }
     stopwatchTrain.Stop();
     totalTrainingTime += stopwatchTrain.ElapsedMilliseconds;
@@ -202,20 +227,30 @@ for (int i = 0; i < 90000; i++)
         Console.WriteLine($"Game nr: {i} positions {gameData.MoveData.Count}");
         Console.WriteLine($"Playing time: {totalPlayingTime / 1000L} s");
         Console.WriteLine($"Training time: {totalTrainingTime / 1000L} s");
-        models[0].CheckForwardTime();
+        foreach (var (key, value) in positionEvaluatorDict)
+        {
+            if (value is NeuralNetworkPositionEvaluator neuralNetworkEvaluator)
+            {
+                Console.WriteLine(key+ "NN" + neuralNetworkEvaluator.NeuralNetwork.Description);
+                var (_ ,labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BarpointHoldingGame, key);
+                neuralNetworkEvaluator.NeuralNetwork.checkMaxFeatureRelevance();
+                neuralNetworkEvaluator.NeuralNetwork.CheckForwardTime();
+            }
+        }
+        /*models[0].CheckForwardTime();
         models[1].CheckForwardTime();
         //model.CheckNNUERatio();
         //model.CheckDeadInputs();
         //modelContact.CheckWeightsInc();
         //modelContact.CheckActivationHistory();
-        var (_, labelsContact) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BearoffVs1Point, modelIndex:1);
+        
         var (_, labelsNoContact) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BearOffGamesNoContact[0], modelIndex:0);
 
         models[0].checkMaxFeatureRelevance(labelsNoContact);
         Console.WriteLine();
         //models[1].checkFeatureRelevance(labelsContact);
         models[1].checkMaxFeatureRelevance(labelsContact);
-       
+       */
     }
 
     //Most extra games we add from the 'main' game
@@ -234,9 +269,13 @@ for (int i = 0; i < 90000; i++)
     if ((i + 1) % saveFrequency == 0)
     {
         saveCounter++;
-        foreach (var model in models) {
-            model.Save();
-            model.Save(saveCounter);
+        foreach (var (key, value) in positionEvaluatorDict)
+        {
+            if (value is NeuralNetworkPositionEvaluator neuralNetworkEvaluator)
+            {
+                neuralNetworkEvaluator.NeuralNetwork.Save();
+                neuralNetworkEvaluator.NeuralNetwork.Save(saveCounter);
+            }
         }
         //Code for checking that a loaded network behave the same
         //modelContact.Save(modelFile);

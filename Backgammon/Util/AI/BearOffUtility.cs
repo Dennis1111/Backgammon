@@ -2,10 +2,11 @@
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Utils;
 using System.Text;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.Util.AI
 {
-    internal class BeafOffUtility
+    internal class BearOffUtility
     {
         public static int MaxCheckers = 7;
 
@@ -138,10 +139,10 @@ namespace Backgammon.Util.AI
                     if (bearOffDict.ContainsKey(key)) {
                         continue;
                     }
-                    backgammonBoard.CheckerPoints = bearOffPosition;
+                    backgammonBoard.Position = bearOffPosition;
                         
                     var ply = 10000;
-                    var (evaluation, scoreVector) = minMaxUtility.EvaluatePositionAverage(bearOffPosition, BackgammonBoard.Player1, ply, neuralNetworks);
+                    var (evaluation, scoreVector) = minMaxUtility.EvaluatePositionAverage(bearOffPosition, BackgammonBoard.Player1, ply);
                     
                     /*if (i != j) {
                         var mirroredBearOffPosition = BackgammonBoard.MirrorBoard(bearOffPosition);

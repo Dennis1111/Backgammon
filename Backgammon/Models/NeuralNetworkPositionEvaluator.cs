@@ -1,18 +1,37 @@
 ﻿using Backgammon.Models.NeuralNetwork;
 using Backgammon.Models;
+using static Backgammon.Util.Constants;
+using Backgammon.Util;
+using Backgammon.Utils;
 
 public class NeuralNetworkPositionEvaluator : IBackgammonPositionEvaluator
 {
     private NeuralNetwork _neuralNetwork;
+    private PositionType _positionType;
+    public NeuralNetwork NeuralNetwork => _neuralNetwork;
 
-    public NeuralNetworkPositionEvaluator(NeuralNetwork neuralNetwork)
+    public NeuralNetworkPositionEvaluator(NeuralNetwork neuralNetwork, PositionType positionType)
     {
         _neuralNetwork = neuralNetwork;
+        _positionType = positionType;
     }
 
-    public float[] Evaluate(int[] position)
+    public float[] Evaluate(int[] position, int player)
     {
         // Assuming NeuralNetwork has a method EvaluatePosition
-        return null;// _neuralNetwork.FeedForward(position);
+        var (inputData, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(position, _positionType, player);
+        var predict = _neuralNetwork.FeedForward(inputData);
+
+        if (MirrorBoardForPlayer2 && player == BackgammonBoard.Player2)
+        {
+            predict = ScoreUtility.MirrorScore(predict);
+            /*if (debug)
+            {
+                Console.WriteLine($"\n Mirrored + {string.Join(", ", predict)}");
+            }*/
+        }
+        
+        predict = ScoreUtility.AdjustEstimatedScore(predict, position);
+        return predict;
     }
 }

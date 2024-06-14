@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace Backgammon.Models
 {
-    internal interface IBackgammonPositionEvaluator
+    public interface IBackgammonPositionEvaluator
     {
+        float[] Evaluate(int[] position, int player);
     }
 }

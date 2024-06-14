@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using static Backgammon.Models.Move;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.Models
 {
@@ -32,7 +33,7 @@ namespace Backgammon.Models
         public const int MidPointP2 = 12;
 
         // Represents the state of the board
-        public int[] CheckerPoints { get; set; }
+        public int[] Position { get; set; }
 
         // Current player (Player1 or Player2)
         public int CurrentPlayer { get; set; }
@@ -47,7 +48,7 @@ namespace Backgammon.Models
         {
             // Initialize the board with 28 points for the 24 standard points,
             // plus positions for the bar and bear-off
-            CheckerPoints = new int[28];
+            Position = new int[28];
             ResetBoard();
         }
 
@@ -78,7 +79,7 @@ namespace Backgammon.Models
                 if (row == 0)
                     boardStr.Append("pips:").Append(pipCountP2);
                 if (row == 1)
-                    boardStr.Append("off:").Append(-CheckerPoints[CheckersOffP2]);
+                    boardStr.Append("off:").Append(-Position[CheckersOffP2]);
 
                 if (row == 4 && CurrentPlayer == Player2)
                     boardStr.Append("rolled: ").Append(Die1).Append(Die2);
@@ -111,7 +112,7 @@ namespace Backgammon.Models
                 if (row == 0)
                     boardStr.Append("pips:").Append(pipCountP1);
                 if (row == 1)
-                    boardStr.Append("off:").Append(CheckerPoints[CheckersOffP1]);
+                    boardStr.Append("off:").Append(Position[CheckersOffP1]);
                 boardStr.Append("\n");
             }
 
@@ -120,7 +121,7 @@ namespace Backgammon.Models
 
         private string FormatPoint(int point, int row)
         {
-            int numCheckers = CheckerPoints[point];
+            int numCheckers = Position[point];
             if (row == 0)
             {
                 if (Math.Abs(numCheckers) > 0)
@@ -133,29 +134,29 @@ namespace Backgammon.Models
                 return " ";
         }
 
-        public static float[] ScoreAsVector(int[] checkerPoints)
+        public static float[] ScoreAsVector(int[] position)
         {
             // Initialize the score vector as a float array
             float[] scoreVector = new float[6];
 
-            if (!GameEndedStatic(checkerPoints))
+            if (!GameEndedStatic(position))
             {
                 // If the game hasn't ended, return the default score vector [0,0,0,0,0,0]
                 return scoreVector;
             }
 
-            if (checkerPoints[CheckersOffP1] == 15)
+            if (position[CheckersOffP1] == 15)
             {
                 // Player 1 wins
                 scoreVector[0] = 1.0f; // Win for player 1
-                if (!SavedGammon(checkerPoints, Player2))
+                if (!SavedGammon(position, Player2))
                 {
-                    if (checkerPoints[CheckersOffP2] == 0)
+                    if (position[CheckersOffP2] == 0)
                     {
                         scoreVector[1] = 1.0f; // Gammon for player 1
                     }
                     // Must include the bar point 0,1,2,3,4,5,6
-                    if (checkerPoints.Take(7).Any(value => value < 0))
+                    if (position.Take(7).Any(value => value < 0))
                     {
                         scoreVector[2] = 1.0f; // Backgammon for player 1
                     }
@@ -165,14 +166,14 @@ namespace Backgammon.Models
             {
                 // Player 2 wins
                 scoreVector[3] = 1.0f; // Win for player 2
-                if (!SavedGammon(checkerPoints, Player1))
+                if (!SavedGammon(position, Player1))
                 {
-                    if (checkerPoints[CheckersOffP1] == 0)
+                    if (position[CheckersOffP1] == 0)
                     {
                         scoreVector[4] = 1.0f; // Gammon for player 2
                     }
                     // Must include bar point 19,20,21,22,23,24,25
-                    if (checkerPoints.Skip(19).Take(7).Any(value => value > 0))
+                    if (position.Skip(19).Take(7).Any(value => value > 0))
                     {
                         scoreVector[5] = 1.0f; // Backgammon for player 2
                     }
@@ -181,7 +182,7 @@ namespace Backgammon.Models
             return scoreVector;
         }
 
-        public static int[] MirrorBoard(int[] checkerPoints)
+        public static int[] MirrorBoard(int[] position)
         {
             // Pre-allocate an array of size 28 to include all positions
             int[] mirroredBoard = new int[28];
@@ -189,16 +190,16 @@ namespace Backgammon.Models
             // Mirror the main points from AcePointP1 to AcePointP2
             for (int i = AcePointP1; i <= AcePointP2; i++)
             {
-                mirroredBoard[AcePointP2 - i + AcePointP1] = -checkerPoints[i];
+                mirroredBoard[AcePointP2 - i + AcePointP1] = -position[i];
             }
 
             // Handle special positions: Bar and Borne-off checkers
-            mirroredBoard[OnTheBarP1] = -checkerPoints[OnTheBarP2]; // Player 1's bar checkers become Player 2's
-            mirroredBoard[OnTheBarP2] = -checkerPoints[OnTheBarP1]; // Player 2's bar checkers become Player 1's
+            mirroredBoard[OnTheBarP1] = -position[OnTheBarP2]; // Player 1's bar checkers become Player 2's
+            mirroredBoard[OnTheBarP2] = -position[OnTheBarP1]; // Player 2's bar checkers become Player 1's
 
             // Switch the borne-off checkers
-            mirroredBoard[CheckersOffP1] = -checkerPoints[CheckersOffP2]; // Player 2's borne-off checkers
-            mirroredBoard[CheckersOffP2] = -checkerPoints[CheckersOffP1]; // Player 1's borne-off checkers
+            mirroredBoard[CheckersOffP1] = -position[CheckersOffP2]; // Player 2's borne-off checkers
+            mirroredBoard[CheckersOffP2] = -position[CheckersOffP1]; // Player 1's borne-off checkers
 
             return mirroredBoard;
         }
@@ -206,18 +207,18 @@ namespace Backgammon.Models
         private void ResetBoard()
         {
             // Reset the board to the starting position
-            CheckerPoints = new int[28]; // Clear the board
+            Position = new int[28]; // Clear the board
             //The bottom (Player 1) side
-            CheckerPoints[AcePointP1] = -2;
-            CheckerPoints[SixPointP1] = 5;
-            CheckerPoints[EightPointP1] = 3;
-            CheckerPoints[MidPointP2] = -5;
+            Position[AcePointP1] = -2;
+            Position[SixPointP1] = 5;
+            Position[EightPointP1] = 3;
+            Position[MidPointP2] = -5;
             
             //The top (Player 2) side
-            CheckerPoints[AcePointP2] = 2;
-            CheckerPoints[SixPointP2] = -5; // Player 2 starting position
-            CheckerPoints[EightPointP2] = -3;
-            CheckerPoints[MidPointP1] = 5;
+            Position[AcePointP2] = 2;
+            Position[SixPointP2] = -5; // Player 2 starting position
+            Position[EightPointP2] = -3;
+            Position[MidPointP1] = 5;
 
             CurrentPlayer = Player1; // Player 1 starts
         }
@@ -225,7 +226,7 @@ namespace Backgammon.Models
         public (int pipsPlayer1, int pipsPlayer2) PipCount()
         {
             // Directly uses the instance's Points array
-            return PipCountStatic(this.CheckerPoints);
+            return PipCountStatic(this.Position);
         }
 
         internal static (int pipsPlayer1, int pipsPlayer2) PipCountStatic(int[] points)
@@ -246,10 +247,33 @@ namespace Backgammon.Models
             return (pipsPlayer1, pipsPlayer2);
         }
 
+        internal static (int pipsPlayer1, int pipsPlayer2) PipCountBackgameTiming(int[] points)
+        {
+            int pipsPlayer1 = 0;
+            int pipsPlayer2 = 0;
+            for (int i = 1; i <= 18; i++)
+            {
+                if (points[i] > 0)
+                {
+                    pipsPlayer1 += i * points[i];
+                }
+            }
+
+            for (int i = 1; i <= 18; i++)
+            {
+                var checkers = points[AcePointP2 - i + 1];
+                if (checkers > 0)
+                {
+                    pipsPlayer2 += i * checkers;
+                }
+            }
+            return (pipsPlayer1, pipsPlayer2);
+        }
+
         // Instance method to check if the game has ended
         public bool GameEnded()
         {
-            return GameEndedStatic(CheckerPoints);
+            return GameEndedStatic(Position);
         }
 
         // Static method to check if a game has ended given a points array
@@ -264,9 +288,9 @@ namespace Backgammon.Models
         }
 
         // Static method to check if there's still contact between the players' checkers
-        internal static bool StillContact(int[] checkerPoints)
+        internal static bool StillContact(int[] position)
         {
-            if (GameEndedStatic(checkerPoints))
+            if (GameEndedStatic(position))
                 return false;
 
             /*int lastCheckerP1 = 0;
@@ -282,7 +306,7 @@ namespace Backgammon.Models
             
             int lastCheckerP1 = 0;
             for (int i = OnTheBarP1; i >= AcePointP1; i--) {
-                if (checkerPoints[i] > 0)
+                if (position[i] > 0)
                 {
                     lastCheckerP1 = i;
                     break;
@@ -292,7 +316,7 @@ namespace Backgammon.Models
             int lastCheckerP2 = 0;
             for (int i = OnTheBarP2; i <= AcePointP2; i++)
             {
-                if (checkerPoints[i] < 0)
+                if (position[i] < 0)
                 {
                     lastCheckerP2 = i;
                     break;
@@ -321,32 +345,32 @@ namespace Backgammon.Models
         }
 
         // Internal static method to check if a gammon has been saved for a specific player
-        internal static bool SavedGammon(int[] checkerPoints, int player)
+        internal static bool SavedGammon(int[] position, int player)
         {
             if (player == Player1)
             {
-                return checkerPoints[CheckersOffP1] > 0;
+                return position[CheckersOffP1] > 0;
             }
             else // Assuming any value not Player1 is Player2 for simplicity
             {
-                return checkerPoints[CheckersOffP2] < 0;
+                return position[CheckersOffP2] < 0;
             }
         }
 
         // Internal static method to check if a gammon has been saved for both players
-        internal static (bool savedForPlayer1, bool savedForPlayer2) SavedGammonForBoth(int[] checkerPoints)
+        internal static (bool savedForPlayer1, bool savedForPlayer2) SavedGammonForBoth(int[] position)
         {
-            return (checkerPoints[CheckersOffP1] > 0, checkerPoints[CheckersOffP2] < 0);
+            return (position[CheckersOffP1] > 0, position[CheckersOffP2] < 0);
         }
 
-        internal static bool SavedBackgammon(int[] checkerPoints, int player)
+        internal static bool SavedBackgammon(int[] position, int player)
         {
-            if (SavedGammon(checkerPoints, player))
+            if (SavedGammon(position, player))
             {
                 return true;
             }
 
-            if (StillContact(checkerPoints))
+            if (StillContact(position))
             {
                 return false; // As long as there is contact, you can be sent back
             }
@@ -356,7 +380,7 @@ namespace Backgammon.Models
                 for (int i = 0; i < 7; i++)
                 {
                     // Assuming 1-based indexing for board positions, adjust if your setup is different
-                    if (checkerPoints[OnTheBarP1 - i] > 0)
+                    if (position[OnTheBarP1 - i] > 0)
                     {
                         return false; // Player 1 has checkers in the last six points or on the bar
                     }
@@ -367,7 +391,7 @@ namespace Backgammon.Models
                 for (int i = 0; i < 7; i++)
                 {
                     // Adjust the range if your board indexing or direction is different
-                    if (checkerPoints[OnTheBarP2 + i] < 0)
+                    if (position[OnTheBarP2 + i] < 0)
                     {
                         return false; // Player 2 has checkers in the first six points or on the bar
                     }
@@ -377,30 +401,30 @@ namespace Backgammon.Models
             return true; // No checkers in the last six points or on the bar, and no contact
         }
 
-        internal static (bool isValid, int checkersP1, int checkersP2) ValidateBoard(int[] checkerPoints)
+        internal static (bool isValid, int checkersP1, int checkersP2) ValidateBoard(int[] position)
         {
             int checkersP1 = 0;
             int checkersP2 = 0;
-            for (int point = 0; point < checkerPoints.Length; point++)
+            for (int point = 0; point < position.Length; point++)
             {
-                if (checkerPoints[point] > 0)
+                if (position[point] > 0)
                 {
-                    checkersP1 += checkerPoints[point];
+                    checkersP1 += position[point];
                 }
-                else if (checkerPoints[point] < 0)
+                else if (position[point] < 0)
                 {
-                    checkersP2 -= checkerPoints[point]; // Subtract to make positive, since P2's checkers are negative
+                    checkersP2 -= position[point]; // Subtract to make positive, since P2's checkers are negative
                 }
             }
 
-            bool isValid = checkersP1 == 15 && checkersP2 == 15 && checkerPoints.Length == 28;
+            bool isValid = checkersP1 == 15 && checkersP2 == 15 && position.Length == 28;
             return (isValid, checkersP1, checkersP2);
         }
 
         // Method for performing a bear-off move, updated to use the new CheckerMove class
-        internal static (CheckerMove checkerMove, int[] updatedPoints) BearOff(int[] checkerPoints, int fromPos, int player)
+        internal static (CheckerMove checkerMove, int[] updatedPoints) BearOff(int[] position, int fromPos, int player)
         {
-            int[] pointsCopy = (int[])checkerPoints.Clone();
+            int[] pointsCopy = (int[])position.Clone();
             CheckerMove checkerMove;
 
             if (player == Player1)
@@ -419,7 +443,7 @@ namespace Backgammon.Models
             var (isValidPosition, checkersP1, checkersP2) = ValidateBoard(pointsCopy);
             if (!isValidPosition)
             {
-                Console.WriteLine("INV: " + string.Join(", ", checkerPoints));
+                Console.WriteLine("INV: " + string.Join(", ", position));
                 Console.WriteLine("INV: " + string.Join(", ", pointsCopy));
                 throw new InvalidOperationException($"Invalid board state after bear off: P1 Checkers = {checkersP1}, P2 Checkers = {checkersP2}");
             }
@@ -427,9 +451,9 @@ namespace Backgammon.Models
             return (checkerMove, pointsCopy);
         }
 
-        internal static (CheckerMove checkerMove, int[] updatedPoints) MoveChecker(int[] checkerPoints, int fromPos, int die, int player)
+        internal static (CheckerMove checkerMove, int[] updatedPoints) MoveChecker(int[] position, int fromPos, int die, int player)
         {
-            int[] pointsCopy = (int[])checkerPoints.Clone();
+            int[] pointsCopy = (int[])position.Clone();
             int targetPos;
             CheckerMove checkerMove;
 
@@ -469,7 +493,7 @@ namespace Backgammon.Models
             var (isValidPosition, checkersP1, checkersP2) = ValidateBoard(pointsCopy);
             if (!isValidPosition)
             {
-                Console.WriteLine("origin" + string.Join(", ", checkerPoints));
+                Console.WriteLine("origin" + string.Join(", ", position));
                 Console.WriteLine("cp" + string.Join(", ", pointsCopy));
                 throw new InvalidOperationException($"Invalid board state after move: P1 Checkers = {checkersP1}, P2 Checkers = {checkersP2}");
             }
@@ -477,26 +501,26 @@ namespace Backgammon.Models
             return (checkerMove, pointsCopy);
         }
 
-        internal static bool AnyCheckersOnTheBar(int[] checkerPoints, int player)
+        internal static bool AnyCheckersOnTheBar(int[] position, int player)
         {
             if (player == Player1)
             {
-                return checkerPoints[OnTheBarP1] > 0;
+                return position[OnTheBarP1] > 0;
             }
             else // Assuming Player2
             {
-                return checkerPoints[OnTheBarP2] < 0;
+                return position[OnTheBarP2] < 0;
             }
         }
 
-        private static bool IsBearOffAllowed(int[] checkerPoints, int player)
+        private static bool IsBearOffAllowed(int[] position, int player)
         {
             if (player == Player1)
             {
                 // Iterate from 'on the bar' position down to just above the home board start, excluding index 6
                 for (int i = 25; i >= 7; i--)
                 {
-                    if (checkerPoints[i] > 0) return false; // Found a Player 1 checker outside the designated bear-off zone
+                    if (position[i] > 0) return false; // Found a Player 1 checker outside the designated bear-off zone
                 }
                 return true; // No checkers found outside the bear-off zone, bearing off is allowed
             }
@@ -505,20 +529,20 @@ namespace Backgammon.Models
                 // Adjust Player 2's logic as needed based on their 'on the bar' position and home board
                 for (int i = 0; i <= 18; i++)
                 {
-                    if (checkerPoints[i] < 0) return false; // Found a Player 2 checker outside the designated bear-off zone
+                    if (position[i] < 0) return false; // Found a Player 2 checker outside the designated bear-off zone
                 }
                 return true; // No checkers found outside the bear-off zone, bearing off is allowed
             }
         }
 
         // Method to determine if the checker is the last one in the bear-off zone
-        private static bool IsLastChecker(int[] checkerPoints, int point, int player)
+        private static bool IsLastChecker(int[] position, int point, int player)
         {
             if (player == Player1)
             {
                 for (int index = point + 1; index <= 6; index++) // For Player 1, check home board points 1 through 6
                 {
-                    if (checkerPoints[index] > 0)
+                    if (position[index] > 0)
                     {
                         return false; // Found another Player 1 checker in the bear-off zone
                     }
@@ -528,7 +552,7 @@ namespace Backgammon.Models
             {
                 for (int index = point - 1; index >= 19; index--) // For Player 2, check home board points 24 through 19
                 {
-                    if (checkerPoints[index] < 0)
+                    if (position[index] < 0)
                     {
                         return false; // Found another Player 2 checker in the bear-off zone
                     }
@@ -537,63 +561,63 @@ namespace Backgammon.Models
             return true; // No other checkers found in the bear-off zone, so it's the last checker
         }
 
-        public static bool IsValidCheckerMoveFromTheBar(int[] checkerPoints, int die, int player)
+        public static bool IsValidCheckerMoveFromTheBar(int[] position, int die, int player)
         {
             if (player == Player1)
             {
                 // For PLAYER_1, check if the target position (starting from the bar position minus the die roll)
                 // has less than or equal to one opponent checker, making it a valid move.
-                return checkerPoints[OnTheBarP1 - die] >= -1;
+                return position[OnTheBarP1 - die] >= -1;
             }
             else
             {
                 // For the opponent (not PLAYER_1), check if the target position (starting from the bar position plus the die roll)
                 // has less than or equal to one of PLAYER_1's checkers, making it a valid move.
-                return checkerPoints[OnTheBarP2 + die] <= 1;
+                return position[OnTheBarP2 + die] <= 1;
             }
         }
 
 
         // Method to check if a checker move is valid
-        internal static bool IsValidCheckerMove(int[] checkerPoints, int point, int die, int player, bool isBearOffAllowed)
+        internal static bool IsValidCheckerMove(int[] position, int point, int die, int player, bool isBearOffAllowed)
         {
             if (player == Player1)
             {
-                if (checkerPoints[point] <= 0) return false;
+                if (position[point] <= 0) return false;
                 if (point - die == AcePointP1 - 1) return isBearOffAllowed;
                 if (point - die < AcePointP1 - 1 && isBearOffAllowed)
-                    return IsLastChecker(checkerPoints, point, player);
+                    return IsLastChecker(position, point, player);
                 if (point - die < AcePointP1) return false;
-                return checkerPoints[point - die] > -2;
+                return position[point - die] > -2;
             }
             else // Player 2
             {
-                if (checkerPoints[point] >= 0) return false;
+                if (position[point] >= 0) return false;
                 if (point + die == AcePointP2 + 1) return isBearOffAllowed;
                 if (point + die > AcePointP2 + 1 && isBearOffAllowed)
-                    return IsLastChecker(checkerPoints, point, player);
+                    return IsLastChecker(position, point, player);
                 if (point + die > AcePointP2) return false;
-                return checkerPoints[point + die] < 2; // Check if the target point is not blocked by more than 1 opponent checker
+                return position[point + die] < 2; // Check if the target point is not blocked by more than 1 opponent checker
             }
         }
 
         // Method to generate legal checker moves for a given die roll and player
-        private static List<(CheckerMove move, int[] board, int searchFrom)> GenerateLegalCheckerMoves(int[] checkerPoints, int die, int player, int searchFrom = 1)
+        private static List<(CheckerMove move, int[] board, int searchFrom)> GenerateLegalCheckerMoves(int[] position, int die, int player, int searchFrom = 1)
         {
             var movesAndBoards = new List<(CheckerMove move, int[] board, int searchFrom)>();
-            if (AnyCheckersOnTheBar(checkerPoints, player))
+            if (AnyCheckersOnTheBar(position, player))
             {
-                if (IsValidCheckerMoveFromTheBar(checkerPoints, die, player))
+                if (IsValidCheckerMoveFromTheBar(position, die, player))
                 {
                     int pointFrom = player == Player1 ? OnTheBarP1 : OnTheBarP2;
-                    var (move, board) = MoveChecker(checkerPoints, pointFrom, die, player); // Placeholder for actual implementation
+                    var (move, board) = MoveChecker(position, pointFrom, die, player); // Placeholder for actual implementation
                     searchFrom = 1; // Reset search start when moving from the bar
                     movesAndBoards.Add((move, board, searchFrom));
                 }
             }
             else
             {
-                bool isBearOffAllowed = IsBearOffAllowed(checkerPoints, player); // Placeholder for actual implementation
+                bool isBearOffAllowed = IsBearOffAllowed(position, player); // Placeholder for actual implementation
                 //Console.WriteLine("IsBearoffAllowed"+ isBearOffAllowed);
                 int searchTo = isBearOffAllowed ? 24 : 23;
 
@@ -601,17 +625,17 @@ namespace Backgammon.Models
                 {
                     int pointFrom = player == Player1 ? 25 - point : point;
 
-                    if (IsValidCheckerMove(checkerPoints, pointFrom, die, player, isBearOffAllowed))
+                    if (IsValidCheckerMove(position, pointFrom, die, player, isBearOffAllowed))
                     {
                         CheckerMove move;
                         int[] board;
                         if (isBearOffAllowed && (player == Player1 ? pointFrom - die < 1 : pointFrom + die > 24))
                         {
-                            (move, board) = BearOff(checkerPoints, pointFrom, player);
+                            (move, board) = BearOff(position, pointFrom, player);
                         }
                         else
                         {
-                            (move, board) = MoveChecker(checkerPoints, pointFrom, die, player);
+                            (move, board) = MoveChecker(position, pointFrom, die, player);
                         }
                         movesAndBoards.Add((move, board, point));
                     }
@@ -664,11 +688,11 @@ namespace Backgammon.Models
         }
 
         // Method to generate all legal moves for a given pair of non-double dice rolls
-        private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesNonDouble(int[] checkerPoints, int die1, int die2, int player)
+        private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesNonDouble(int[] position, int die1, int die2, int player)
         {
             Move emptyMove = new();
             int searchFrom = 1; // Start looping from the ace point
-            var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, checkerPoints, searchFrom) };
+            var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, position, searchFrom) };
 
             // Generate moves for die1 followed by die2
             var (movesWithBoards, complete) = GenerateLegalMovesHelper(movesWithBoardsInit, new List<int> { die1, die2 }, player);
@@ -700,11 +724,11 @@ namespace Backgammon.Models
             return legalMoves;
         }
 
-        private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesDouble(int[] checkerPoints, int die, int player)
+        private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesDouble(int[] position, int die, int player)
         {
             Move emptyMove = new();
             int searchFrom = 1;
-            var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, checkerPoints, searchFrom) };
+            var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, position, searchFrom) };
             var dies = new List<int> { die, die, die, die }; // Four times the same die value
 
             var (movesWithBoards, complete) = GenerateLegalMovesHelper(movesWithBoardsInit, dies, player);
@@ -788,17 +812,17 @@ namespace Backgammon.Models
         // SearchFrom should be removed
         public List<(Move move, int[] board)> GenerateLegalMoves(int die1, int die2, int player, bool removeDuplicates = true)
         {
-            return GenerateLegalMovesStatic(this.CheckerPoints, die1, die2, player, removeDuplicates);
+            return GenerateLegalMovesStatic(this.Position, die1, die2, player, removeDuplicates);
         }
 
-        public static int CountPrimes(int[] checkerPoints, int player)
+        public static int CountPrimes(int[] position, int player)
         {
             int longestPrime = 0;
             int currentPrime = 0;
 
             for (int i = 1; i <= 24; i++)
             {
-                if ((player == Player1 && checkerPoints[i] >= 2) || (player == Player2 && checkerPoints[i] <= -2))
+                if ((player == Player1 && position[i] >= 2) || (player == Player2 && position[i] <= -2))
                 {
                     currentPrime++;
                 }
@@ -813,12 +837,12 @@ namespace Backgammon.Models
             return longestPrime;
         }
 
-        public static int CountBlots(int[] checkerPoints, int player)
+        public static int CountBlots(int[] position, int player)
         {
             int blotCount = 0;
             for (int i = 1; i <= 24; i++)
             {
-                if ((player == Player1 && checkerPoints[i] == 1) || (player == Player2 && checkerPoints[i] == -1))
+                if ((player == Player1 && position[i] == 1) || (player == Player2 && position[i] == -1))
                 {
                     blotCount++;
                 }
@@ -826,12 +850,12 @@ namespace Backgammon.Models
             return blotCount;
         }
 
-        public static int CountSafePoints(int[] checkerPoints, int player)
+        public static int CountSafePoints(int[] position, int player)
         {
             int safeCount = 0;
             for (int point = 1; point <= 24; point++)
             {
-                if ((player == Player1 && checkerPoints[point] >= 2) || (player == Player2 && checkerPoints[point] <= -2))
+                if ((player == Player1 && position[point] >= 2) || (player == Player2 && position[point] <= -2))
                 {
                     safeCount++;
                 }
@@ -839,31 +863,58 @@ namespace Backgammon.Models
             return safeCount;
         }
 
-        public static bool IsOneTwoBackgame(int[] checkerPoints)
+        public static bool IsOneTwoBackgame(int[] position)
         {
-            if (checkerPoints[AcePointP1] <= -2 && checkerPoints[DeucePointP1] <= -2)
+            if (position[AcePointP1] <= -2 && position[DeucePointP1] <= -2)
                 return true;
-            if (checkerPoints[AcePointP2] >= 2 && checkerPoints[DeucePointP2] >= 2)
+            if (position[AcePointP2] >= 2 && position[DeucePointP2] >= 2)
                 return true;          
             return false;
         }
 
-        public static bool IsOneThreeBackgame(int[] checkerPoints)
+        public static bool IsOneThreeBackgame(int[] position)
         {
-            if (checkerPoints[AcePointP1] <= -2 && checkerPoints[ThreePointP1] <= -2)
+            if (position[AcePointP1] <= -2 && position[ThreePointP1] <= -2)
                 return true;
-            if (checkerPoints[AcePointP2] >= 2 && checkerPoints[ThreePointP2] >= 2)
+            if (position[AcePointP2] >= 2 && position[ThreePointP2] >= 2)
                 return true;
             return false;
         }
 
-        public static bool IsTwoThreeBackgame(int[] checkerPoints)
+        public static bool IsTwoThreeBackgame(int[] position)
         {
-            if (checkerPoints[DeucePointP1] <= -2 && checkerPoints[ThreePointP1] <= -2)
+            if (position[DeucePointP1] <= -2 && position[ThreePointP1] <= -2)
                 return true;
-            if (checkerPoints[DeucePointP2] >= 2 && checkerPoints[DeucePointP2] >= 2)
+            if (position[DeucePointP2] >= 2 && position[DeucePointP2] >= 2)
                 return true;
             return false;
+        }
+
+        public static PositionType MapBoardToPositionType(int[] position)
+        {
+            if (!StillContact(position))
+                return PositionType.NoContact;
+            //12,13,23 Backgames are the backgames with most critical timing
+            if (IsOneTwoBackgame(position))
+                return PositionType.Backgame12;
+            if (IsOneThreeBackgame(position))
+                return PositionType.Backgame13;
+            if (IsTwoThreeBackgame(position))
+                return PositionType.Backgame23;
+
+            var primeP1 = CountPrimes(position, Player1);
+            var primeP2 = CountPrimes(position, Player1);
+            
+            if (primeP1 == 6 || primeP2 == 6) {
+                return PositionType.SixPrime;
+            }
+
+            if (primeP1 == 5 || primeP2 == 5)
+            {
+                return PositionType.FivePrime;
+            }
+
+            return PositionType.Contact;
         }
 
         /*// Feels perhaps belongs elsewher

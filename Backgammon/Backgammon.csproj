@@ -7,12 +7,6 @@
     <PublishAot>true</PublishAot>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Util\BoardToNeuralInputsEncoder - Copy" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Util\BoardToNeuralInputsEncoder - Copy" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="8.0.4" />

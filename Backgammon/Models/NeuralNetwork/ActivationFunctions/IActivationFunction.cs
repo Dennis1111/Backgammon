@@ -1,6 +1,4 @@
-﻿
-
-namespace Backgammon.Models.NeuralNetwork.ActivationFunctions
+﻿namespace Backgammon.Models.NeuralNetwork.ActivationFunctions
 {
     public interface IActivationFunction
     {

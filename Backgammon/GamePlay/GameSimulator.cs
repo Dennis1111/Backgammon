@@ -1,22 +1,24 @@
 ﻿using Backgammon.Models;
-using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util;
 using Backgammon.Util.AI;
 using Backgammon.Utils;
 using Serilog;
 using System.Diagnostics;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.GamePlay
 {
     public class GameSimulator
     {
-        private NeuralNetwork[] _neuralNetworks;
-        private Dictionary<string, float[]> _bearOffDatabase;
+        //private NeuralNetwork[] _neuralNetworks;
+        //private Dictionary<string, float[]> _bearOffDatabase;
         private readonly ILogger _gameLogger; // Custom logger for game simulation
         private readonly ILogger _extraGamesLogger; // Custom logger for extra game positions
         private BackgammonBoard _board;
         private MinMaxUtility _minMaxUtility;
+        private Dictionary<PositionType, IBackgammonPositionEvaluator> _positionEvaluators;
 
+        /*
         public GameSimulator(NeuralNetwork[] neuralNetworks,  Dictionary<string, float[]> bearOffDatabase, string logFileDirectory)
         {
             _neuralNetworks = neuralNetworks;
@@ -30,7 +32,18 @@ namespace Backgammon.GamePlay
             _minMaxUtility = new MinMaxUtility(bearOffDatabase);
             // Make sure to flush and close the logger
             // Log.CloseAndFlush();
-        } 
+        }*/
+
+        public GameSimulator(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators, string logFileDirectory)
+        {
+            _positionEvaluators = positionEvaluators;
+            _gameLogger = CreateLogger(logFileDirectory + "//games.log"); // Initialize the custom logger
+            _extraGamesLogger = CreateLogger(logFileDirectory + "//ExtraGames.log"); // Initialize the custom logger
+            _board = new BackgammonBoard();
+            _minMaxUtility = new MinMaxUtility(positionEvaluators);
+            // Make sure to flush and close the logger
+            // Log.CloseAndFlush();
+        }
 
         private ILogger CreateLogger(string logFilePath)
         {
@@ -108,29 +121,29 @@ namespace Backgammon.GamePlay
                 currentPosition = BackgammonBoard.MirrorBoard(currentPosition);
             }
             var backgammonBoard = new BackgammonBoard();
-            backgammonBoard.CheckerPoints = currentPosition;
+            backgammonBoard.Position = currentPosition;
 
             // Deciding the current player. If 'player' is null, choose randomly.
             int currentPlayer = player ?? (random.NextDouble() > 0.8 ? BackgammonBoard.Player1 : BackgammonBoard.Player2);
-            Console.WriteLine("Staring Position:\n" + backgammonBoard + "bearoff"+ BeafOffUtility.IsBearOffPosition(currentPosition));
-            while (!BackgammonBoard.GameEndedStatic(currentPosition) && !BeafOffUtility.IsBearOffPosition(currentPosition) && gameData.MoveData.Count < maxMoves)
+            Console.WriteLine("Staring Position:\n" + backgammonBoard + "bearoff"+ BearOffUtility.IsBearOffPosition(currentPosition));
+            while (!BackgammonBoard.GameEndedStatic(currentPosition) && !BearOffUtility.IsBearOffPosition(currentPosition) && gameData.MoveData.Count < maxMoves)
             {
                 var die1 = random.Next(6) + 1;
                 var die2 = random.Next(6) + 1;
-                backgammonBoard.CheckerPoints = currentPosition;
+                backgammonBoard.Position = currentPosition;
                 backgammonBoard.Die1 = die1;
                 backgammonBoard.Die2 = die2;
                 backgammonBoard.CurrentPlayer = currentPlayer;
                 if (gameData.MoveData.Count < 6)
                 {
                     Console.WriteLine("Pos:\n" + backgammonBoard);
-                    Console.WriteLine("Pos:\n" + string.Join(", ", backgammonBoard.CheckerPoints));
-                    var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.CheckerPoints, currentPlayer, die1, die2, 1, _neuralNetworks);
+                    Console.WriteLine("Pos:\n" + string.Join(", ", backgammonBoard.Position));
+                    var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.Position, currentPlayer, die1, die2, 1);
                     Console.WriteLine("Scorev MinMax:\n" + string.Join(", ", scorev));
-                    var score1 = ScoreUtility.EvaluatePosition(backgammonBoard.CheckerPoints, currentPlayer, _neuralNetworks, _bearOffDatabase, 0f, 1f);
+                    var score1 = ScoreUtility.EvaluatePosition(backgammonBoard.Position, currentPlayer, _positionEvaluators);
                     Console.WriteLine("ScoreV1 EvalPos: \n" + string.Join(", ", score1));
-                    var mirroredPos = BackgammonBoard.MirrorBoard(backgammonBoard.CheckerPoints);
-                    var score2 = ScoreUtility.EvaluatePosition(mirroredPos, BackgammonGameHelper.Opponent(currentPlayer), _neuralNetworks, _bearOffDatabase, 0f, 1f);
+                    var mirroredPos = BackgammonBoard.MirrorBoard(backgammonBoard.Position);
+                    var score2 = ScoreUtility.EvaluatePosition(mirroredPos, BackgammonGameHelper.Opponent(currentPlayer), _positionEvaluators);
                     Console.WriteLine("ScoreV2 Eval Mirrored: \n" + string.Join(", ", score2));
                 }
                 
@@ -142,7 +155,7 @@ namespace Backgammon.GamePlay
                 {
                     Stopwatch stopwatchMinMax = Stopwatch.StartNew();
                     var minMaxPly = 1;
-                    var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly, _neuralNetworks);
+                    var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly);
                     
                     stopwatchMinMax.Stop();
 
@@ -150,7 +163,7 @@ namespace Backgammon.GamePlay
                     {
                         _gameLogger.Information("Board");
                         _gameLogger.Information("\n" + backgammonBoard);
-                        _gameLogger.Information("Pos:\n" + string.Join(", ", backgammonBoard.CheckerPoints));
+                        _gameLogger.Information("Pos:\n" + string.Join(", ", backgammonBoard.Position));
                         // var stopWatch = new Stopwatch();
                         // stopWatch.Start();
                         // var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.Points, currentPlayer, die1, die2, 1, _neuralNetworks);
@@ -217,7 +230,7 @@ namespace Backgammon.GamePlay
                     }
                     //var boardEncoded = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(currentPosition, opponent);
                     //Should make clampmin max global vars
-                    float[] scoreVector = ScoreUtility.EvaluatePosition(currentPosition, opponent, _neuralNetworks, _bearOffDatabase, 0f, 1f); // Evaluate the board resulting from the move
+                    float[] scoreVector = ScoreUtility.EvaluatePosition(currentPosition, opponent, _positionEvaluators); // Evaluate the board resulting from the move
                     //Maybe need to check this
                     //float[] scoreVector = _neuralNetwork.FeedForward(boardEncoded); // Evaluate the board resulting from the move
                     float equity = ScoreUtility.CalculateEquity(scoreVector);
@@ -231,7 +244,7 @@ namespace Backgammon.GamePlay
 
         private void LogBoardPosition(int[] board, string description)
         {
-            _board.CheckerPoints = board;
+            _board.Position = board;
             _extraGamesLogger.Information($"{description} : \n {_board}");
         }
 
@@ -285,7 +298,7 @@ namespace Backgammon.GamePlay
                 {
                     // With some probability we add move from 30 best candidates
                     var nBest = 60;
-                    if (rand.NextDouble() > 0.3f) {
+                    if (rand.NextDouble() > 0.5f) {
                         var addCandidateProb = 0.8;
                         _extraGamesLogger.Information("Adding from 30 best candidates :");
                         for (int candCount = 1; candCount <= Math.Min(moveData.MoveCandidates.Count-1, nBest); candCount++) {
@@ -316,7 +329,7 @@ namespace Backgammon.GamePlay
                                 extraData.Add((moveCand.BoardAfter, opponent));
                                 LogBoardPosition(boardBefore, "Move" + moveData.Move);
                                 LogBoardPosition(boardAfter, $"Playd move {nrOfSafePoints}\n ");
-                                backgammonBoard.CheckerPoints = moveData.BoardBefore;
+                                backgammonBoard.Position = moveData.BoardBefore;
                                 LogBoardPosition(moveCand.BoardAfter, $"EXTRA POS Fewer direct hits {nrOfSafePoints}\n ");
                                 extraPositionsForMoveAdded++;
                             }
@@ -325,7 +338,7 @@ namespace Backgammon.GamePlay
                                 extraData.Add((moveCand.BoardAfter, opponent));
                                 LogBoardPosition(boardBefore, "Move" + moveData.Move);
                                 LogBoardPosition(boardAfter, "Primepos Length Played:" + primeLengthForPlayedMove);
-                                backgammonBoard.CheckerPoints = moveData.BoardAfter;
+                                backgammonBoard.Position = moveData.BoardAfter;
                                 LogBoardPosition(moveCand.BoardAfter, "EXTRA POS Primeposition Cand Length:" + primeLengthCand);
                                 extraPositionsForMoveAdded++;
                             }

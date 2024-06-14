@@ -2,12 +2,29 @@
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util.AI;
 using Backgammon.Util;
-using System.CodeDom;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.Utils
 {
     public static class ScoreUtility
     {
+        // Consider moving to score utility
+        // The equity , scorevector should not be mirrored ie if player1 is better the equity should be > 0 regardless player to move
+        public static float[] EvaluatePosition(int[] position, int player, Dictionary<PositionType, IBackgammonPositionEvaluator> _positionEvaluators, bool gameEnded = false, bool debug = false)
+        {
+            // if gameEnded is not provided as arg we need to check it
+            if (gameEnded || BackgammonBoard.GameEndedStatic(position))
+            {
+                var gameEndedEval = BackgammonBoard.ScoreAsVector(position);
+                return gameEndedEval;
+            }
+            
+            var positionType = BackgammonBoard.MapBoardToPositionType(position);
+            var evaluation = _positionEvaluators[positionType].Evaluate(position, player);
+            
+            return evaluation;
+        }
+
         public static float[] EvaluatePosition(int[] board, int player, NeuralNetwork[] neuralNetworks, float clampMin, float clampMax, bool gameEnded = false, bool debug = false) {
             return EvaluatePosition(board, player, neuralNetworks, [], clampMin, clampMax,gameEnded, debug);
         }
@@ -25,12 +42,12 @@ namespace Backgammon.Utils
                 return gameEndedEval;
             }
 
-            if (BeafOffUtility.IsBearOffPosition(board)) {
-                if (player == BackgammonBoard.Player2) { 
+            if (BearOffUtility.IsBearOffPosition(board)) {
+                if (player == BackgammonBoard.Player2) {
                     board = BackgammonBoard.MirrorBoard(board);
                 }
 
-                var key = BeafOffUtility.ConvertBearOffBoardToString(board);
+                var key = BearOffUtility.ConvertBearOffBoardToString(board);
                 if (bearOffDatabase.ContainsKey(key))
                 {
                     return player == BackgammonBoard.Player2 ? MirrorScore(bearOffDatabase[key]) : bearOffDatabase[key];
@@ -53,14 +70,13 @@ namespace Backgammon.Utils
                 Console.WriteLine($"\n Predicted + {string.Join(", ", predict)}");
             }
             
-            if (Constants.MirrorBoardForPlayer2 && player == BackgammonBoard.Player2)
+            if (MirrorBoardForPlayer2 && player == BackgammonBoard.Player2)
             {
                 predict = MirrorScore(predict);
                 if (debug)
                 {
                     Console.WriteLine($"\n Mirrored + {string.Join(", ", predict)}");
-                }
-                
+                }                
             }
             
             predict = AdjustEstimatedScore(predict, board, clampMin, clampMax);
@@ -103,6 +119,7 @@ namespace Backgammon.Utils
             return netEquity;
         }
 
+        // If sigmoid activation function clampmin clampmax is not needed as the range is already 0-1
         public static float[] AdjustEstimatedScore(float[] estimatedScore, int[] board, float clampMin = 0, float clampMax = 1)
         {
             var p1SavedGammon = BackgammonBoard.SavedGammon(board, BackgammonBoard.Player1);

@@ -13,27 +13,36 @@ namespace Backgammon.Util
             return BackgammonBoard.StillContact(board) ? 1 : 0;
         }
 
-        public static PositionType MapBoardToPositionType(int[] board)
+        public static (float[] neuralInputs, string[] labels) EncodeBoardToNeuralInputs(int[] position, PositionType positionType, int player = BackgammonBoard.Player1, bool alwaysMirror = false)
         {
-            if (!BackgammonBoard.StillContact(board))
-                return PositionType.NoContact;
-            if (BackgammonBoard.IsOneTwoBackgame(board))
-                return PositionType.Backgame12;
-            if (BackgammonBoard.IsOneThreeBackgame(board))
-                return PositionType.Backgame13;
-            if (BackgammonBoard.IsTwoThreeBackgame(board))
-                return PositionType.Backgame23;
-            //if (BackgammonBoard.StillContact(board))
-            //    return PositionType.Contact;
-
-            // Add more conditions to map to different position types as needed
-
-            return PositionType.NoContact;
+            if (alwaysMirror || (MirrorBoardForPlayer2 && player == BackgammonBoard.Player2))
+            {
+                position = BackgammonBoard.MirrorBoard(position);
+            }
+            switch (positionType)
+            {
+                case PositionType.NoContact:
+                    // Code to handle Value1
+                    return EncodeNoContactBoardToNeuralInputs(position);
+                case PositionType.Backgame12://For now we only have two different input encoders
+                    //return EncodeContactGameToNeuralInputs(position);
+                case PositionType.Backgame13:
+                    //return EncodeContactGameToNeuralInputs(position);
+                case PositionType.Backgame23:
+                    //return EncodeContactGameToNeuralInputs(position);
+                case PositionType.SixPrime:
+                    //return EncodeContactGameToNeuralInputs(position);
+                case PositionType.FivePrime:
+                    //return EncodeContactGameToNeuralInputs(position);
+                default:
+                    return EncodeContactGameToNeuralInputs(position);
+            }
         }
+    
 
         public static (float[] neuralInputs, string[] labels) EncodeBoardToNeuralInputs(int[] points, int modelIndex, int player = BackgammonBoard.Player1, bool alwaysMirror = false)
         {
-            if (alwaysMirror || (Constants.MirrorBoardForPlayer2 && player == BackgammonBoard.Player2))
+            if (alwaysMirror || (MirrorBoardForPlayer2 && player == BackgammonBoard.Player2))
             {
                 points = BackgammonBoard.MirrorBoard(points);
             }
@@ -43,12 +52,13 @@ namespace Backgammon.Util
                 : EncodeContactGameToNeuralInputs(points);
         }
 
-        private static (float[] neuralInputs, string[] labels) EncodeContactGameToNeuralInputs(int[] points)
+        public static (float[] neuralInputs, string[] labels) EncodeContactGameToNeuralInputs(int[] points)
         {
             (int p1PipCount, int p2PipCount) = BackgammonBoard.PipCountStatic(points);
-
+            (int p1PipCountBackGame, int p2PipCountBackGame) = BackgammonBoard.PipCountBackgameTiming(points);
             var encodedData = new List<(float[], string[])>
             {
+                EncodeBackgameTiming(p1PipCountBackGame, p2PipCountBackGame),
                 EncodeBorneOffDifferenceToNeuralInputs(points),
                 EncodeBoard1To24SemiSparseToNeuralInputs(points),
                 EncodeBarCheckersToNeuralInputs(points),
@@ -541,6 +551,30 @@ namespace Backgammon.Util
                 gammonCrossoversPlayer2 / (float)maxCount
             };
             string[] labels = { "GammonSaveCrossoversP1", "GammonSaveCrossoversP2" };
+            return (neuralInputs, labels);
+        }
+
+        // The pipcount for the checkers outside the opponents home board should be quite valuable to determine how likely crunch will happen
+        // Normally you say that the pipcount difference should be in a range like for 12backgame min 100 but then that depends also on how many checkers
+        // have 'freedom' for instance with with 5 checkers in an 12 backgame we need more than 100 diff
+        public static (float[] neuralInputs, string[] labels) EncodeBackgameTiming(int pipTimingP1, int pipTimingP2)
+        {
+            int crunchTreshold = 40;
+            
+            // If the timing is very small (lets say > 40) the crunch has already started so I think we can treat 0-40 as quite the same
+            var timingP1 = Math.Max((pipTimingP1 - crunchTreshold), 0);
+            var timingP2 = Math.Max((pipTimingP2 - crunchTreshold), 0);
+            // Lets set a maxTiming for better normalization
+            
+            int maxTiming = 80;
+            timingP1 = Math.Min(timingP1, maxTiming);
+            timingP2 = Math.Min(timingP2, maxTiming);
+            float[] neuralInputs =
+            {
+                timingP1 / (float)maxTiming,
+                timingP2 / (float)maxTiming
+            };// Should maybe scale to -1,1
+            string[] labels = { "BackgameTimingP1", "BackgameTimingP2" };
             return (neuralInputs, labels);
         }
 

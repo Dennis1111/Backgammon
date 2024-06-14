@@ -1,6 +1,7 @@
 ﻿using Backgammon.Models.NeuralNetwork;
 using Backgammon.Models;
 using Backgammon.Utils;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.Util.AI
 {
@@ -12,17 +13,20 @@ namespace Backgammon.Util.AI
         private float _clampMax = 1f;
         private readonly Dictionary<string, float[]> _bearOffDatabase;
         private bool _isCreatingBearoffDatabase=false;
-        
+        private Dictionary<PositionType, IBackgammonPositionEvaluator> _positionEvaluators;
         // private bool _useClampTargets=true;
 
-        public MinMaxUtility()
-        {
-            _bearOffDatabase = [];
-        }
-
+        
         public MinMaxUtility(Dictionary<string, float[]> bearOffDatabase)
         {
             _bearOffDatabase = bearOffDatabase;
+            _positionEvaluators = [];
+            _isCreatingBearoffDatabase = true;
+        }
+        public MinMaxUtility(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators)
+        {
+            _positionEvaluators = positionEvaluators;
+            _bearOffDatabase = ((BearoffDatabaseEvaluator)positionEvaluators[PositionType.BearOffDatabase]).BearOffDatabase;           
         }
 
         public void useClampValues(float min, float max) {
@@ -55,7 +59,7 @@ namespace Backgammon.Util.AI
         /// <param name="plyDepth"></param>
         /// <param name="neuralNetwork"></param>
         /// <returns>An ordered list of moves with best move first based on the moves equity</returns>
-        internal List<MoveData> EvaluateMoveCandidates(int[] board, int currentPlayer, int die1, int die2, int plyDepth, NeuralNetwork[] neuralNetworks)
+        internal List<MoveData> EvaluateMoveCandidates(int[] board, int currentPlayer, int die1, int die2, int plyDepth)
         {
             ResetLeafCounter();
             List<MoveData> moveDatas = [];
@@ -65,7 +69,7 @@ namespace Backgammon.Util.AI
                 var newBoard = moveAndBoard.board;
                 var move = moveAndBoard.move;
                 // shall we decrease ply here ?
-                var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth, neuralNetworks);
+                var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
                 var moveData = new MoveData(currentPlayer, board, newBoard, move, equity, scoreVector);
                 moveDatas.Add(moveData);
             }
@@ -93,13 +97,13 @@ namespace Backgammon.Util.AI
         /// <param name="plyDepth"></param>
         /// <param name="neuralNetwork"></param>
         /// <returns>The minmax equity and scoreVector for this position</returns>
-        internal (float, float[]) MinMax(int[] board, int currentPlayer, int die1, int die2, int plyDepth, NeuralNetwork[] neuralNetworks)
+        internal (float, float[]) MinMax(int[] board, int currentPlayer, int die1, int die2, int plyDepth)
         {
             //Console.WriteLine("Minmax board" + String.Join(",", board));
             var gameEnded = BackgammonBoard.GameEndedStatic(board);
-            var isBearOffLeave = BeafOffUtility.IsBearOffPosition(board);
+            var isBearOffLeave = BearOffUtility.IsBearOffPosition(board);
             if (isBearOffLeave && _isCreatingBearoffDatabase) {
-                if (!BeafOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase)) {
+                if (!BearOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase)) {
                     isBearOffLeave = false;
                 }
             }
@@ -107,7 +111,7 @@ namespace Backgammon.Util.AI
             if (plyDepth <= 0 || gameEnded || isBearOffLeave)
             {
                 _leafCounter++;
-                var scoreVector = ScoreUtility.EvaluatePosition(board, currentPlayer, neuralNetworks, _bearOffDatabase, _clampMin, _clampMax, gameEnded);
+                var scoreVector = ScoreUtility.EvaluatePosition(board, currentPlayer, _positionEvaluators, gameEnded);
                 var equity = ScoreUtility.CalculateEquity(scoreVector);
                 //Console.WriteLine("Minmax leafboard" + String.Join(",", board));
                 //Console.WriteLine("Minmax score" + String.Join(",", scoreVector));
@@ -120,7 +124,7 @@ namespace Backgammon.Util.AI
             if (movesAndBoards.Count == 0)
             {
                 // Since the player can't move the evaluation of this position is the average for this position with the opponent as currentPlayer
-                return EvaluatePositionAverage(board, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1, neuralNetworks);
+                return EvaluatePositionAverage(board, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
             }
             else
             {
@@ -129,7 +133,7 @@ namespace Backgammon.Util.AI
                     var newBoard = moveAndBoard.board;
                     var move = moveAndBoard.move;
                     // shall we decrease ply here ?
-                    var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1 , neuralNetworks);
+                    var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
                     if ((currentPlayer == BackgammonBoard.Player1 && equity > bestEquity) ||
                         (currentPlayer == BackgammonBoard.Player2 && equity < bestEquity))
                     {
@@ -152,14 +156,14 @@ namespace Backgammon.Util.AI
         /// <param name="plyDepth"></param>
         /// <param name="neuralNetwork"></param>
         /// <returns>The equity and scoreVector for this position</returns>
-        internal (float averageEquity, float[] averageScores) EvaluatePositionAverage(int[] board, int currentPlayer, int plyDepth, NeuralNetwork[] neuralNetworks)
+        internal (float averageEquity, float[] averageScores) EvaluatePositionAverage(int[] board, int currentPlayer, int plyDepth)
         {
             //Console.WriteLine("Minmax av board" + String.Join(",", board));
             var gameEnded = BackgammonBoard.GameEndedStatic(board);
-            var isBearOffLeave = BeafOffUtility.IsBearOffPosition(board);
+            var isBearOffLeave = BearOffUtility.IsBearOffPosition(board);
             if (isBearOffLeave && _isCreatingBearoffDatabase)
             {
-                if (!BeafOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase))
+                if (!BearOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase))
                 {
                     isBearOffLeave = false;
                 }
@@ -168,7 +172,7 @@ namespace Backgammon.Util.AI
             if (plyDepth <= 0 || gameEnded || isBearOffLeave)
             {
                 _leafCounter++;
-                var scoreVector = ScoreUtility.EvaluatePosition(board, currentPlayer, neuralNetworks, _bearOffDatabase, _clampMin, _clampMax, gameEnded);
+                var scoreVector = ScoreUtility.EvaluatePosition(board, currentPlayer, _positionEvaluators, gameEnded);
                 var equity = ScoreUtility.CalculateEquity(scoreVector);
                 //Console.WriteLine("Minmax av leafboard" + String.Join(",", board));
                 //Console.WriteLine("Minmax av score" + String.Join(",", scoreVector));
@@ -182,7 +186,7 @@ namespace Backgammon.Util.AI
                 for (int die2 = die1; die2 <= 6; die2++)
                 {
                     var weight = die1 == die2 ? 1 : 2;
-                    var (_, bestScoreVector) = MinMax(board, currentPlayer, die1, die2, plyDepth, neuralNetworks);
+                    var (_, bestScoreVector) = MinMax(board, currentPlayer, die1, die2, plyDepth);
                     //Console.WriteLine("die1: " + die1 + "die2: " + die2 + "ply" + plyDepth);
                     for (int i = 0; i < scores.Length; i++)
                     {

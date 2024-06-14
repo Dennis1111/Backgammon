@@ -4,6 +4,7 @@ using Backgammon.Util;
 using Backgammon.Util.AI;
 using Backgammon.Utils;
 using Serilog;
+using static Backgammon.Util.Constants;
 
 namespace Backgammon.Training
 {
@@ -11,22 +12,17 @@ namespace Backgammon.Training
     {
         private readonly ILogger _trainLogger; // Custom logger for game simulation
         private readonly MinMaxUtility _minMaxUtility; // Custom logger for game simulation
-        public NeuralNetwork[] _neuralNetworks { get; set; }
-        private Dictionary<string, float[]> _bearOffDatabase;
-
-        protected const float ClampMax = 1.0f;
-        protected const float ClampMin = 0f;
-
-        public GameDataTrainer(NeuralNetwork[] neuralNetworks, Dictionary<string, float[]> bearOffDatabase, string logFilePath)
+        
+        public GameDataTrainer(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators, string logFilePath)
         {
-            _neuralNetworks = neuralNetworks;
+            //_neuralNetworks = neuralNetworks;
             // Optional: Clear the log file at startup
             // ClearLogFile(logFilePath);
             // Configure Serilog
             _trainLogger = CreateLogger(logFilePath); // Initialize the custom logger
-            _minMaxUtility = new MinMaxUtility(bearOffDatabase);
-            _minMaxUtility.useClampValues(ClampMin, ClampMax);
-            _bearOffDatabase = bearOffDatabase;
+            _minMaxUtility = new MinMaxUtility(positionEvaluators);
+            //_minMaxUtility.useClampValues(ClampMin, ClampMax);
+            //_bearOffDatabase = bearOffDatabase;
 
             // Make sure to flush and close the logger
             // Log.CloseAndFlush();
@@ -43,7 +39,7 @@ namespace Backgammon.Training
         public void inspectTrainingData(TrainingData trainingData, int player)
         {
             BackgammonBoard backgammonBoard = new BackgammonBoard();
-            backgammonBoard.CheckerPoints = trainingData.board;
+            backgammonBoard.Position = trainingData.board;
             Console.WriteLine($"Train board \n {backgammonBoard}");
             Console.WriteLine($"player \n {player}");
             Console.WriteLine($"Target: {string.Join(", ", trainingData.Target)} ");
@@ -55,16 +51,17 @@ namespace Backgammon.Training
             List<TrainingData> trainingDatas = [];
             var moveDataListReversed = gameData.MoveData.ToList().AsEnumerable().Reverse();
             var backgammonBoard = new BackgammonBoard();
-            
+            var initalLearningRate = learningRate;
+            PositionType? previousPositionType = null;
             foreach (var elem in moveDataListReversed)
             {
                 var trainingBoard = elem.BoardBefore;
                 var playerAtTurn = elem.Player;
                 //Just for debugging
-                backgammonBoard.CheckerPoints = trainingBoard;
+                backgammonBoard.Position = trainingBoard;
                 backgammonBoard.CurrentPlayer = playerAtTurn;
 
-                if (BeafOffUtility.IsBearOffPosition(trainingBoard))
+                if (BearOffUtility.IsBearOffPosition(trainingBoard))
                 {
                     //We use a bearoff database for these positions so no training needed here
                     continue;
@@ -73,17 +70,19 @@ namespace Backgammon.Training
                 _trainLogger.Information("\n" + backgammonBoard);
 
                 var ply = 1;
-                (float equity, float[] scoreVector) = _minMaxUtility.EvaluatePositionAverage(trainingBoard, playerAtTurn, ply, _neuralNetworks);
+                (float equity, float[] scoreVector) = _minMaxUtility.EvaluatePositionAverage(trainingBoard, playerAtTurn, ply);
 
                 _trainLogger.Information(" ScoreVec MinMax" + string.Join(", ", scoreVector));
-                var modelIndex = BoardToNeuralInputsEncoder.MapBoardToModel(trainingBoard);
-                var (inputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(trainingBoard, modelIndex, playerAtTurn);
+                //var modelIndex = BoardToNeuralInputsEncoder.MapBoardToModel(trainingBoard);
+                var positionType = BackgammonBoard.MapBoardToPositionType(trainingBoard);
+                
+                var (inputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(trainingBoard, positionType, playerAtTurn);
 
-                if (Constants.MirrorBoardForPlayer2 && elem.Player == BackgammonBoard.Player2)
+                if (MirrorBoardForPlayer2 && elem.Player == BackgammonBoard.Player2)
                 {
                     var mirroredScore = ScoreUtility.MirrorScore(scoreVector);
                     // the inputs is already mirrored by EncodeBoardToNeuralInputs
-                    var trainingData = new TrainingData(inputs, mirroredScore, learningRate, modelIndex)
+                    var trainingData = new TrainingData(inputs, mirroredScore, learningRate, positionType)
                     {
                         board = trainingBoard
                     };
@@ -92,18 +91,27 @@ namespace Backgammon.Training
                 }
                 else
                 {
-                    var trainingData = new TrainingData(inputs, scoreVector, learningRate, modelIndex)
+                    var trainingData = new TrainingData(inputs, scoreVector, learningRate, positionType)
                     {
                         board = trainingBoard
                     };
                     trainingDatas.Add(trainingData);
                     //inspectTrainingData(trainingData, playerAtTurn);
                 }
-                learningRate *= 0.9f;
+                if (previousPositionType.HasValue && previousPositionType != positionType)
+                {
+                    learningRate = initalLearningRate;
+                }
+                else
+                {                    
+                    learningRate *= 0.8f;
+                }
+                previousPositionType = positionType;
             }
             return trainingDatas;
         }
 
+        /*
         public List<TrainingData> GameToTrainingData(GameData gameData, float learningRate)
         {
             var initialLearningRate = learningRate;
@@ -122,11 +130,11 @@ namespace Backgammon.Training
             var (inputsLastPos, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(lastPosition.BoardAfter, modelIndex, playerAtTurnBoardAfter);
             // To be used for temporal difference with previous positions
 
-            var lastScoreVector = ScoreUtility.EvaluatePosition(lastPosition.BoardAfter, playerAtTurnBoardAfter, _neuralNetworks, ClampMin, ClampMax);
+            var lastScoreVector = ScoreUtility.EvaluatePosition(lastPosition.BoardAfter, playerAtTurnBoardAfter, _positionEvaluators);
             //The scored is based on the actual provided board position though so we should mirror the score for player to match the train inputs
 
             //Test skipping adding final position to avoid training values near zero and one
-            if (Constants.MirrorBoardForPlayer2 && playerAtTurnBoardAfter == BackgammonBoard.Player2)
+            if (MirrorBoardForPlayer2 && playerAtTurnBoardAfter == BackgammonBoard.Player2)
             {
                 var mirroredScore = ScoreUtility.MirrorScore(lastScoreVector);
                 var trainingData = new TrainingData(inputsLastPos, mirroredScore, learningRate, modelIndex);
@@ -166,13 +174,13 @@ namespace Backgammon.Training
                 if (moveDataListReversed.Count() - index < 2 && !BackgammonBoard.StillContact(elem.BoardBefore))
                 {
                     final2PlyPosition = true;
-                    backgammonBoard.CheckerPoints = elem.BoardBefore;
+                    backgammonBoard.Position = elem.BoardBefore;
                     backgammonBoard.CurrentPlayer = elem.Player;
                     _trainLogger.Information("Board");
                     _trainLogger.Information("\n" + backgammonBoard);
 
                     var ply = 2;
-                    (float equity, scoreVector) = _minMaxUtility.EvaluatePositionAverage(elem.BoardBefore, elem.Player, ply, _neuralNetworks);
+                    (float equity, scoreVector) = _minMaxUtility.EvaluatePositionAverage(elem.BoardBefore, elem.Player, ply);
                     // WE should consider 2 ply here as the truth and not combine with the pos n (if this is n-1) from he end
                     _trainLogger.Information(" ScoreVec MinMax" + string.Join(", ", scoreVector));
                     //_trainLogger.Information(" ScoreVecAdjusted" + string.Join(", ", scoreVector));
@@ -183,7 +191,7 @@ namespace Backgammon.Training
                 {
                     //temp testing using minmax ..
                     //(float equity, scoreVector) = _minMaxUtility.EvaluatePositionAverage(elem.BoardBefore, elem.Player, 1 , _neuralNetworks);
-                    scoreVector = ScoreUtility.EvaluatePosition(elem.BoardBefore, elem.Player, _neuralNetworks, ClampMin, ClampMax);
+                    scoreVector = ScoreUtility.EvaluatePosition(elem.BoardBefore, elem.Player, _positionEvaluators);
                     _trainLogger.Information("Board to evaluate" + string.Join(", ", elem.BoardBefore));
                     _trainLogger.Information("ScoreVec Eval Pos" + string.Join(", ", scoreVector));
                 }
@@ -262,19 +270,19 @@ namespace Backgammon.Training
             // var previousScoreVector = gameData()
             //trainingDatas.AddRange(trainingDatasMirrored);
             return trainingDatas;
-        }
+        }*/
 
         // When using a mirrored board for learning the game (player at turn is not part of the input) then 
         // to generare mirrored trainingdata we need a mirrored inputdata and a mirrored score
         // Should only be use when wen dont acutallt mirror inputs and have player part of input
-        private TrainingData MirroredTrainingData(int[] board, int player, float[] targetVector, float learningRate, int modelIndex)
+        private TrainingData MirroredTrainingData(int[] board, int player, float[] targetVector, float learningRate, PositionType positionType)
         {
             var opponent = BackgammonGameHelper.Opponent(player);
             // Calling encode with opponent will mirror the when constant MirrorBoardForPlayer2 = true and player =2
             var mirrorBoard = true;
-            var (inputDataMirrored, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(board, modelIndex, opponent, mirrorBoard);
+            var (inputDataMirrored, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(board, positionType, opponent, mirrorBoard);
             var mirrorScore = ScoreUtility.MirrorScore(targetVector);
-            return new TrainingData(inputDataMirrored, mirrorScore, learningRate, modelIndex);
+            return new TrainingData(inputDataMirrored, mirrorScore, learningRate, positionType);
         }
 
         /*private TrainingData MirroredTrainingData(int[] board, int player, float[] targetVector, float learningRate, int modelIndex)
