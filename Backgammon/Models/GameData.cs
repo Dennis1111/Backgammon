@@ -5,7 +5,7 @@ namespace Backgammon.Models
     public class GameData
     {
         public List<MoveData> MoveData { get; private set; } = new List<MoveData>();
-
+        public int Score { get; set; }
         public GameData() { 
             MoveData = new List<MoveData>();
         }

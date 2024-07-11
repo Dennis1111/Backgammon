@@ -16,7 +16,7 @@ namespace Backgammon.Models.NeuralNetwork
         public double CalcVsSkipped => _skippedCalculations / (double)_calculations;
         //private readonly ILogger _nnueLogger; // Custom logger for game simulation
 
-        public NNUELayer(int inputNodes, int outputNodes, IActivationFunction activationFunction, ILogger logger) : base(inputNodes, outputNodes, activationFunction, logger)
+        public NNUELayer(int inputNodes, int outputNodes, IActivationFunction activationFunction, ILogger logger) : base(inputNodes, outputNodes, activationFunction, logger, true)
         {
             _inputsPrevious = new float[inputNodes];
             _ZPrevious = new float[inputNodes];
@@ -103,7 +103,6 @@ namespace Backgammon.Models.NeuralNetwork
             _firstPass = false; // No longer the first pass
             return Activations;
         }
-
 
 /*      public override float[] FeedForwardOld(float[] inputs)
         {

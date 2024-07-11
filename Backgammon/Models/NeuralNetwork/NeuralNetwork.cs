@@ -26,7 +26,27 @@ namespace Backgammon.Models.NeuralNetwork
             _Logger = LogManager.CreateLogger(LogFile);
         }
 
-        public void Save() {
+        public NeuralNetwork Clone()
+        {
+            NeuralNetwork clone = new NeuralNetwork(LogfilePath, Description)
+            {
+                InitialInputs = InitialInputs != null ? (float[])InitialInputs.Clone() : null,
+                _inputLabels = _inputLabels != null ? (string[])_inputLabels.Clone() : null,
+                DetfaultfilePath = DetfaultfilePath
+            };
+
+            foreach (Layer layer in Layers)
+            {
+                clone.Layers.Add(layer.Clone());
+            }
+
+            clone._Logger = LogManager.CreateLogger(clone.LogFile);
+
+            return clone;
+        }
+
+        public void Save()
+        {
             Save(DetfaultfilePath);
         }
 
@@ -38,7 +58,7 @@ namespace Backgammon.Models.NeuralNetwork
         //A little uggly but for now we just want some history
         public void Save(int index)
         {
-            Save(DetfaultfilePath+index);
+            Save(DetfaultfilePath + index);
         }
 
         public void Save(string filePath)
@@ -61,7 +81,7 @@ namespace Backgammon.Models.NeuralNetwork
             try
             {
                 string json = File.ReadAllText(filePath);
-                var nn = JsonConvert.DeserializeObject<NeuralNetwork>(json, settings);                
+                var nn = JsonConvert.DeserializeObject<NeuralNetwork>(json, settings);
                 nn._Logger = LogManager.CreateLogger(nn.LogFile);
                 foreach (var layer in nn.Layers)
                 {
@@ -91,8 +111,13 @@ namespace Backgammon.Models.NeuralNetwork
 
         public void AddFirstLayer(int inputNodes, int outputNodes, IActivationFunction activationFunction)
         {
-            var layer = new Layer(inputNodes, outputNodes, activationFunction, _Logger);
+            var layer = new Layer(inputNodes, outputNodes, activationFunction, _Logger, true);
             Layers.Add(layer);
+        }
+
+        public void EnableNNUE()
+        {
+            Layers[0].EnableNNUE = true;
         }
 
         public void AddFirstLayerNNUE(int inputNodes, int outputNodes, IActivationFunction activationFunction)
@@ -104,14 +129,13 @@ namespace Backgammon.Models.NeuralNetwork
         public void AddLayer(int outputNodes, IActivationFunction activationFunction)
         {
             var inputNodes = Layers.Last().NumberOfOutputs;
-            var layer = new Layer(inputNodes, outputNodes, activationFunction,_Logger);
+            var layer = new Layer(inputNodes, outputNodes, activationFunction, _Logger, false);
             Layers.Add(layer);
         }
 
         // Activation function application adjusted for clarity
-        public float[] FeedForward(float[] inputs)
-        { 
-            //Console.WriteLine("FF" + Description);
+        public float[] FeedForwardNNUE(float[] inputs)
+        {
             InitialInputs = inputs; // Store the inputs for later use in backpropagation
 
             // Directly initialize 'activations' with the input to emphasize 
@@ -119,8 +143,52 @@ namespace Backgammon.Models.NeuralNetwork
             float[] layerActivations = inputs;
             // Debugging code
             var firstLayer = Layers[0];
-            if (inputs.Length != firstLayer.Weights.GetLength(0)) {
-                throw new InvalidOperationException("inputs doesnt match"+ Description + "in"+ inputs.Length + "W:" +firstLayer.Weights.GetLength(0));
+            if (inputs.Length != firstLayer.Weights.GetLength(0))
+            {
+                throw new InvalidOperationException("inputs doesnt match" + Description + "in" + inputs.Length + "W:" + firstLayer.Weights.GetLength(0));
+            }
+
+            int layerCount = 0;
+            foreach (var layer in Layers)
+            {
+                if (layerCount == 0 && !layer.FirstForwardPass)
+                {
+                    Console.WriteLine("Foward NNUE: " + layerCount);
+                    /*var nnueActivations = layer.FeedForwardNNUE(inputs);
+                    layerActivations = layer.FeedForward(layerActivations);
+                    compareActivations(nnueActivations, layerActivations);*/
+                    layerActivations = layer.FeedForwardNNUE(inputs);
+                }
+                else
+                {
+                    Console.WriteLine("Foward Without NNUE" + layerCount);
+                    layerActivations = layer.FeedForward(layerActivations);
+                }
+                layerCount++;
+            }
+
+            float[] output = new float[layerActivations.Length];
+            Array.Copy(layerActivations, output, layerActivations.Length);
+            return output;
+        }
+
+
+        // Activation function application adjusted for clarity
+        public float[] FeedForward(float[] inputs)
+        {
+            // Console.WriteLine("FF" + Description);
+            InitialInputs = inputs; // Store the inputs for later use in backpropagation
+
+            // Directly initialize 'activations' with the input to emphasize 
+            // that these are the activations for the first actual layer processing.
+            float[] layerActivations = inputs;
+            // Debugging code
+            var firstLayer = Layers[0];
+            //Tempfix for changing loaded nets
+            firstLayer.EnableNNUE = true;
+            if (inputs.Length != firstLayer.Weights.GetLength(0))
+            {
+                throw new InvalidOperationException("inputs doesnt match" + Description + "in" + inputs.Length + "W:" + firstLayer.Weights.GetLength(0));
             }
 
             foreach (var layer in Layers)
@@ -138,7 +206,8 @@ namespace Backgammon.Models.NeuralNetwork
         {
             // Calculate output errors...
             float[] outputErrors = CalculateOutputErrors(prediction, targetValues);
-            for (int i = 0; i < outputErrors.Length; i++) {
+            for (int i = 0; i < outputErrors.Length; i++)
+            {
                 if (float.IsNaN(outputErrors[i]) || float.IsInfinity(outputErrors[i]))
                 {
                     _Logger.Information($"BACK output errors {outputErrors[i]}");
@@ -167,22 +236,27 @@ namespace Backgammon.Models.NeuralNetwork
                     // For other layers, use the activations from the layer before
                     previousLayerActivations = Layers[i - 1].Activations;
                 }
-                outputErrors = Layers[i].BackpropagateOld(outputErrors, learningRate, previousLayerActivations, lassoLambda);
+                outputErrors = Layers[i].Backpropagate(outputErrors, learningRate, previousLayerActivations, lassoLambda);
             }
             return mse;
         }
 
-        public float BatchUpdate(List<TrainingData> trainingData, int epochs=1)
-        {            
-            foreach (var layer in Layers) {
+        public float BatchUpdate(List<TrainingData> trainingData, int epochs = 1)
+        {
+            foreach (var layer in Layers)
+            {
                 layer.initBatchTraining();
             }
             var mseBatchAverage = 0f;
+
             for (int epoch = 0; epoch < epochs; epoch++)
             {
                 float mseSum = 0;
                 foreach (var trainData in trainingData)
                 {
+                    /*if (epoch == 0) {
+                        FeedForwardNormal(trainData.InputData);
+                    }*/
                     var prediction = FeedForward(trainData.InputData);
                     mseSum += Backpropagate(prediction, trainData.Target, trainData.LearningRate, 0f);
                 }
@@ -195,8 +269,8 @@ namespace Backgammon.Models.NeuralNetwork
                 mseBatchAverage += mseSumAverage;
                 Console.WriteLine("mse" + mseSumAverage);
             }
-            
-            return mseBatchAverage/epochs;
+
+            return mseBatchAverage / epochs;
         }
 
         private float[] CalculateOutputErrors(float[] prediction, float[] targetValues)
@@ -222,7 +296,7 @@ namespace Backgammon.Models.NeuralNetwork
 
         public void CheckForwardTime()
         {
-            Console.WriteLine($"Checking forward Time, "+ Description);
+            Console.WriteLine($"Checking forward Time, " + Description);
             var averageTotalMilliSeconds = 0.0;
             foreach (var layer in Layers)
             {
@@ -289,7 +363,8 @@ namespace Backgammon.Models.NeuralNetwork
             }
         }
 
-        public void checkFeatureRelevance(string[] labels) {
+        public void checkFeatureRelevance(string[] labels)
+        {
             // Assuming that an input has high importace if it weights to other neurons have increased
             var layer = Layers[0];
             var weights = layer.Weights;
@@ -336,7 +411,7 @@ namespace Backgammon.Models.NeuralNetwork
             // Print the sorted results
             foreach (var (label, maxWeight) in labeledWeights)
             {
-                Console.Write($"{label}: Max: {Math.Round(maxWeight, 3)} , ");
+                Console.Write($"{label}: {Math.Round(maxWeight, 3)} , ");
             }
         }
 
@@ -348,7 +423,7 @@ namespace Backgammon.Models.NeuralNetwork
             {
                 var w = layer.Weights;
                 _Logger.Information("\nACTIVATION HISTORY Layer: " + layerCount + "\nL0: " + layer._ActivationsHistory.GetLength(0) +
-                    " \nL1: "+  layer._ActivationsHistory.GetLength(1));
+                    " \nL1: " + layer._ActivationsHistory.GetLength(1));
                 for (int i = 0; i < layer._ActivationsHistory.GetLength(0); i++)
                 {
                     if (debug)
@@ -361,7 +436,7 @@ namespace Backgammon.Models.NeuralNetwork
                         activationSum += Math.Abs(layer._ActivationsHistory[i, j]);
                         if (debug)
                         {
-                            _Logger.Information($", {layer._ActivationsHistory[i,j]}");
+                            _Logger.Information($", {layer._ActivationsHistory[i, j]}");
                         }
                     }
                     if (activationSum < 0.001)
@@ -375,7 +450,7 @@ namespace Backgammon.Models.NeuralNetwork
                             }
                         }
                     }
-                    if (activationSum< 0.000001f && layer.ForwardCount>5)
+                    if (activationSum < 0.000001f && layer.ForwardCount > 5)
                     {
                         _Logger.Information($"Potential DEAD Neuron");
                         //Environment.Exit(0);
@@ -392,5 +467,21 @@ namespace Backgammon.Models.NeuralNetwork
                 layer.ResetForwardTime();
             }
         }
+
+        /*private void compareActivations(float[] nnue, float[] normal)
+{
+    for (int i = 0; i < nnue.Length; i++)
+    {
+        {
+            var diff = Math.Abs(nnue[i] - normal[i]);
+            if (diff >= 0.0000000001f)
+            {
+                Console.WriteLine($"nnue diff {i}, {diff}");
+                throw new Exception($"Difference at index {i} exceeds threshold: {diff}");
+            }
+        }
+    }
+}*/
+
     }
 }

@@ -42,7 +42,7 @@ namespace Backgammon.Models.NeuralNetwork
         private int _t = 0; // Time step
 
         // Adam parameters
-        //private float learningRate = 0.001f;
+        // private float learningRate = 0.001f;
         private float _beta1 = 0.9f;
         private float _beta2 = 0.999f;
         private float _epsilon = 1e-8f;
@@ -53,20 +53,31 @@ namespace Backgammon.Models.NeuralNetwork
         private readonly Random rand = new();
 
         protected long forwardTime = 0;
+        private long _forwardTimeNNUE = 0;
         public long ForwardTime => forwardTime;
-
+        public long ForwardTimeNNUE => _forwardTimeNNUE;
         public long _wInc = 1L;
         public long _wDec = 1L;
         public long _wNothing = 1L;
         public double IncvsDec => _wInc / (double)_wDec;
         public double UpdateVsNoUpdate => (_wInc + _wDec) / (double)_wNothing;
 
+        // For NNUE
+        public bool EnableNNUE;
+        // First forward pass should be a normal feedforward, also after any weight changes (backprop) we need a normal feedforward again
+        private bool _NNUEIsForwardReady = false;
+        private float[] _inputsPrevious;
+        private float[] _ZPrevious;
+        private long _calculations;
+        private long _skippedCalculations;
+        private bool _firstForwardPass = true;
+        public bool FirstForwardPass => _firstForwardPass;
         public void ResetForwardTime()
         {
             forwardTime = 0;
         }
 
-        public Layer(int inputNodes, int outputNodes, IActivationFunction activationFunction, ILogger logger)
+        public Layer(int inputNodes, int outputNodes, IActivationFunction activationFunction, ILogger logger, bool enableNNUE)
         {
             _Logger = logger;
             Weights = new float[inputNodes, outputNodes];
@@ -83,7 +94,50 @@ namespace Backgammon.Models.NeuralNetwork
             _vWeights = new float[Weights.GetLength(0), Weights.GetLength(1)];
             _mBiases = new float[Biases.Length];
             _vBiases = new float[Biases.Length];
-            //InitializeAdamParameters();
+
+            // NNUE INIT
+            _inputsPrevious = new float[inputNodes];
+            _ZPrevious = new float[outputNodes];
+            EnableNNUE = enableNNUE;
+            _NNUEIsForwardReady = false;
+        }
+
+        public Layer Clone()
+        {
+            Layer clone = new Layer(Weights.GetLength(0), Weights.GetLength(1), ActivationFunction, _Logger, EnableNNUE)
+            {
+                Weights = (float[,])Weights.Clone(),
+                Biases = (float[])Biases.Clone(),
+                Activations = (float[])Activations.Clone(),
+                _batchWeightUpdates = _batchWeightUpdates != null ? (float[,])_batchWeightUpdates.Clone() : null,
+                _useBatchTraining = _useBatchTraining,
+                _batchBiasUpdates = _batchBiasUpdates != null ? (float[])_batchBiasUpdates.Clone() : null,
+                _prevWeightUpdates = _prevWeightUpdates != null ? (float[,])_prevWeightUpdates.Clone() : null,
+                _prevBiasUpdates = _prevBiasUpdates != null ? (float[])_prevBiasUpdates.Clone() : null,
+                _ActivationsHistory = (float[,])_ActivationsHistory.Clone(),
+                Z = (float[])Z.Clone(),
+                _mWeights = (float[,])_mWeights.Clone(),
+                _vWeights = (float[,])_vWeights.Clone(),
+                _mBiases = (float[])_mBiases.Clone(),
+                _vBiases = (float[])_vBiases.Clone(),
+                _t = _t,
+                _beta1 = _beta1,
+                _beta2 = _beta2,
+                _epsilon = _epsilon,
+                forwardTime = forwardTime,
+                _forwardTimeNNUE = _forwardTimeNNUE,
+                _wInc = _wInc,
+                _wDec = _wDec,
+                _wNothing = _wNothing,
+                _inputsPrevious = (float[])_inputsPrevious.Clone(),
+                _ZPrevious = (float[])_ZPrevious.Clone(),
+                _calculations = _calculations,
+                _skippedCalculations = _skippedCalculations,
+                _firstForwardPass = _firstForwardPass,
+                EnableNNUE = EnableNNUE
+            };
+
+            return clone;
         }
 
         public void initBatchTraining()
@@ -136,40 +190,213 @@ namespace Backgammon.Models.NeuralNetwork
         public bool compare(Layer layer)
         {
             bool isSame = true;
+
+            // Compare Weights
             for (int i = 0; i < Weights.GetLength(0); i++)
             {
                 for (int j = 0; j < Weights.GetLength(1); j++)
                 {
-                    // Assign weights using Xavier initialization (uniform distribution)
-
                     if (Weights[i, j] != layer.Weights[i, j])
                     {
                         isSame = false;
-                        Console.WriteLine($"W {i},  {j} , {Weights[i, j]} != {layer.Weights[i, j]}");
+                        Console.WriteLine($"Weights differ at [{i}, {j}]: {Weights[i, j]} != {layer.Weights[i, j]}");
                     }
                 }
             }
 
+            // Compare Biases
             for (int i = 0; i < Biases.Length; i++)
             {
                 if (Biases[i] != layer.Biases[i])
                 {
                     isSame = false;
-                    Console.WriteLine($" {i} , {Biases[i]} != {layer.Biases[i]}");
+                    Console.WriteLine($"Biases differ at [{i}]: {Biases[i]} != {layer.Biases[i]}");
                 }
             }
 
-            for (int i = 0; i < layer._ActivationsHistory.GetLength(0); i++)
+            // Compare Activations
+            for (int i = 0; i < Activations.Length; i++)
             {
-                for (int j = 0; j < layer._ActivationsHistory.GetLength(1); j++)
+                if (Math.Abs(Activations[i] - layer.Activations[i]) > 0.001f)
+                {
+                    isSame = false;
+                    Console.WriteLine($"Activations differ at [{i}]: {Activations[i]} != {layer.Activations[i]}");
+                }
+            }
+
+            // Compare Batch Weight Updates
+            if (_batchWeightUpdates != null && layer._batchWeightUpdates != null)
+            {
+                for (int i = 0; i < _batchWeightUpdates.GetLength(0); i++)
+                {
+                    for (int j = 0; j < _batchWeightUpdates.GetLength(1); j++)
+                    {
+                        if (_batchWeightUpdates[i, j] != layer._batchWeightUpdates[i, j])
+                        {
+                            isSame = false;
+                            Console.WriteLine($"Batch Weight Updates differ at [{i}, {j}]: {_batchWeightUpdates[i, j]} != {layer._batchWeightUpdates[i, j]}");
+                        }
+                    }
+                }
+            }
+
+            // Compare Batch Bias Updates
+            if (_batchBiasUpdates != null && layer._batchBiasUpdates != null)
+            {
+                for (int i = 0; i < _batchBiasUpdates.Length; i++)
+                {
+                    if (_batchBiasUpdates[i] != layer._batchBiasUpdates[i])
+                    {
+                        isSame = false;
+                        Console.WriteLine($"Batch Bias Updates differ at [{i}]: {_batchBiasUpdates[i]} != {layer._batchBiasUpdates[i]}");
+                    }
+                }
+            }
+
+            // Compare Previous Weight Updates
+            if (_prevWeightUpdates != null && layer._prevWeightUpdates != null)
+            {
+                for (int i = 0; i < _prevWeightUpdates.GetLength(0); i++)
+                {
+                    for (int j = 0; j < _prevWeightUpdates.GetLength(1); j++)
+                    {
+                        if (_prevWeightUpdates[i, j] != layer._prevWeightUpdates[i, j])
+                        {
+                            isSame = false;
+                            Console.WriteLine($"Previous Weight Updates differ at [{i}, {j}]: {_prevWeightUpdates[i, j]} != {layer._prevWeightUpdates[i, j]}");
+                        }
+                    }
+                }
+            }
+
+            // Compare Previous Bias Updates
+            if (_prevBiasUpdates != null && layer._prevBiasUpdates != null)
+            {
+                for (int i = 0; i < _prevBiasUpdates.Length; i++)
+                {
+                    if (_prevBiasUpdates[i] != layer._prevBiasUpdates[i])
+                    {
+                        isSame = false;
+                        Console.WriteLine($"Previous Bias Updates differ at [{i}]: {_prevBiasUpdates[i]} != {layer._prevBiasUpdates[i]}");
+                    }
+                }
+            }
+
+            /*// Compare Activations History
+            for (int i = 0; i < _ActivationsHistory.GetLength(0); i++)
+            {
+                for (int j = 0; j < _ActivationsHistory.GetLength(1); j++)
                 {
                     if (_ActivationsHistory[i, j] != layer._ActivationsHistory[i, j])
                     {
                         isSame = false;
-                        Console.WriteLine($"ActHist {i},  {j} , {Weights[i, j]} != {layer.Weights[i, j]}");
+                        Console.WriteLine($"Activations History differ at [{i}, {j}]: {_ActivationsHistory[i, j]} != {layer._ActivationsHistory[i, j]}");
+                    }
+                }
+            }*/
+
+            // Compare Z
+            for (int i = 0; i < Z.Length; i++)
+            {
+                if (Math.Abs(Z[i] - layer.Z[i]) > 0.001)
+                {
+                    isSame = false;
+                    Console.WriteLine($"Z values differ at [{i}]: {Z[i]} != {layer.Z[i]}");
+                }
+            }
+
+            // Compare mWeights
+            for (int i = 0; i < _mWeights.GetLength(0); i++)
+            {
+                for (int j = 0; j < _mWeights.GetLength(1); j++)
+                {
+                    if (_mWeights[i, j] != layer._mWeights[i, j])
+                    {
+                        isSame = false;
+                        Console.WriteLine($"mWeights differ at [{i}, {j}]: {_mWeights[i, j]} != {layer._mWeights[i, j]}");
                     }
                 }
             }
+
+            // Compare vWeights
+            for (int i = 0; i < _vWeights.GetLength(0); i++)
+            {
+                for (int j = 0; j < _vWeights.GetLength(1); j++)
+                {
+                    if (_vWeights[i, j] != layer._vWeights[i, j])
+                    {
+                        isSame = false;
+                        Console.WriteLine($"vWeights differ at [{i}, {j}]: {_vWeights[i, j]} != {layer._vWeights[i, j]}");
+                    }
+                }
+            }
+
+            // Compare mBiases
+            for (int i = 0; i < _mBiases.Length; i++)
+            {
+                if (_mBiases[i] != layer._mBiases[i])
+                {
+                    isSame = false;
+                    Console.WriteLine($"mBiases differ at [{i}]: {_mBiases[i]} != {layer._mBiases[i]}");
+                }
+            }
+
+            // Compare vBiases
+            for (int i = 0; i < _vBiases.Length; i++)
+            {
+                if (_vBiases[i] != layer._vBiases[i])
+                {
+                    isSame = false;
+                    Console.WriteLine($"vBiases differ at [{i}]: {_vBiases[i]} != {layer._vBiases[i]}");
+                }
+            }
+
+            // Compare time step
+            if (_t != layer._t)
+            {
+                isSame = false;
+                Console.WriteLine($"Time step differs: {_t} != {layer._t}");
+            }
+
+            /*
+            // Compare NNUE properties
+            if (_calculations != layer._calculations)
+            {
+                isSame = false;
+                Console.WriteLine($"Calculations differ: {_calculations} != {layer._calculations}");
+            }
+            if (_skippedCalculations != layer._skippedCalculations)
+            {
+                isSame = false;
+                Console.WriteLine($"Skipped calculations differ: {_skippedCalculations} != {layer._skippedCalculations}");
+            }*/
+
+            if (_firstForwardPass != layer._firstForwardPass)
+            {
+                isSame = false;
+                Console.WriteLine($"First forward pass flag differs: {_firstForwardPass} != {layer._firstForwardPass}");
+            }
+
+            // Compare NNUE previous inputs
+            for (int i = 0; i < _inputsPrevious.Length; i++)
+            {
+                if (Math.Abs(_inputsPrevious[i] - layer._inputsPrevious[i]) > 0.001f)
+                {
+                    isSame = false;
+                    Console.WriteLine($"Previous inputs differ at [{i}]: {_inputsPrevious[i]} != {layer._inputsPrevious[i]}");
+                }
+            }
+
+            // Compare NNUE previous Z
+            for (int i = 0; i < _ZPrevious.Length; i++)
+            {
+                if (Math.Abs(_ZPrevious[i]) - Math.Abs(layer._ZPrevious[i]) > 0.0001f)
+                {
+                    isSame = false;
+                    Console.WriteLine($"Previous Z values differ at [{i}]: {_ZPrevious[i]} != {layer._ZPrevious[i]}");
+                }
+            }
+
             return isSame;
         }
 
@@ -218,16 +445,28 @@ namespace Backgammon.Models.NeuralNetwork
                     matrix[i, j] = (float)(rand.NextDouble() * 0.1 - 0.05);
         }
 
-        public virtual float[] FeedForward(float[] inputs) {
+        public virtual float[] FeedForward(float[] inputs)
+        {
+            if (_firstForwardPass)
+            {
+                _inputsPrevious = new float[inputs.Length];
+                _ZPrevious = new float[Biases.Length];
+            }
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
+            if (EnableNNUE && _NNUEIsForwardReady) {
+                FeedForwardNNUE(inputs);
+            }
+
             var activations = FeedForwardAVX(inputs);
+            _NNUEIsForwardReady = true;
             stopwatch.Stop();
+            //double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
+            //Console.WriteLine("Normal feedforward millis" + seconds*1000);
             forwardTime += stopwatch.ElapsedTicks;
+            _firstForwardPass = false;
             return activations;
         }
-
-        
 
         public virtual float[] FeedForwardAVX(float[] inputs)
         {
@@ -263,6 +502,11 @@ namespace Backgammon.Models.NeuralNetwork
             });
 
             Z = z; // Update class-level Z for backpropagation use
+
+            // Temporary code for use and compare with NNUE computation
+            Array.Copy(Z, _ZPrevious, Z.Length); // Update _ZPrevious for next pass
+            Array.Copy(inputs, _inputsPrevious, inputs.Length); // Update _inputsPrevious for next pass
+
             _forwardCount++;
             return activations; // Return local activations array
         }
@@ -298,30 +542,660 @@ namespace Backgammon.Models.NeuralNetwork
             }
         }
 
-        /*private unsafe void ProcessWithAVX2(float[] inputs, float[] weights, ref float z, int inputLength)
+        private static float[] Vector256ToArray(Vector256<float> vector)
         {
-            Vector256<float> zVector = Vector256<float>.Zero;
-            int i = 0;
-            fixed (float* pInputs = inputs, pWeights = weights)
+            float[] array = new float[Vector256<float>.Count];
+            for (int i = 0; i < Vector256<float>.Count; i++)
             {
-                for (; i <= inputLength - Vector256<float>.Count; i += Vector256<float>.Count)
+                array[i] = vector.GetElement(i);
+            }
+            return array;
+        }
+
+
+        public float[] FeedForwardNNUE(float[] inputs)
+        {
+            var historyIndex = _forwardCount % _HistoryLength;
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+
+            Array.Copy(_ZPrevious, Z, _ZPrevious.Length);
+            _calculations = 0;
+            _skippedCalculations = 0;
+            var changedInputs = new bool[inputs.Length];
+            int nrOfChangedInputs = 0;
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                changedInputs[i] = _inputsPrevious[i] != inputs[i];
+                if (changedInputs[i])
                 {
-                    var inputVector = Avx.LoadVector256(pInputs + i);
-                    var weightsVector = Avx.LoadVector256(pWeights + i);
-                    zVector = Avx.Add(zVector, Avx.Multiply(inputVector, weightsVector));
+                    nrOfChangedInputs++;
                 }
             }
-            float sum = 0;
-            for (int k = 0; k < Vector256<float>.Count; k++)
+            if (Avx2.IsSupported)
             {
-                sum += zVector.GetElement(k);
+                //var zBefore = (float[])Z.Clone();
+                var inputsPreviousBefore = (float[])_inputsPrevious.Clone();
+                //var (activation, zSubtract, zAdd, zAddHist) = FeedForwardNNUEOld(inputs, nrOfChangedInputs);
+
+                // zAdd and zSubtract is for comparison
+                ProcessWithAVX2NNUELock(inputs, inputsPreviousBefore, changedInputs);
+
+                /*int inputLength = inputs.Length;
+                int neuronCount = Biases.Length;
+                object[] locks = new object[neuronCount];
+                for (int i = 0; i < neuronCount; i++)
+                {
+                    locks[i] = new object();
+                }
+                //var historyIndex = _forwardCount % _HistoryLength;
+
+                // Parallelize the loop over neurons
+                Parallel.For(0, neuronCount, j =>
+                {
+                    ProcessNeuronWithAVX2NNUE(j, inputs, _inputsPrevious, ref Z[j], inputLength, locks[j]);
+                    Activations[j] = ActivationFunction.Calculate(Z[j]); // Compute activation
+                    //_ActivationsHistory[j, historyIndex] = Activations[j]; // Store history for analysis
+                });*/
             }
-            for (; i < inputLength; i++)
+            else
             {
-                sum += inputs[i] * weights[i];
+                Environment.Exit(0); // Exit if AVX2 is not supported
             }
-            z = sum;
+
+            Array.Copy(Z, _ZPrevious, Z.Length);
+            Array.Copy(inputs, _inputsPrevious, inputs.Length);
+
+            stopwatch.Stop();
+            _forwardTimeNNUE += stopwatch.ElapsedTicks;
+            _forwardCount++;
+            return Activations;
+        }
+
+        /*
+        private unsafe void ProcessWithAVX2NNUELockAndPrevZ(float[] inputs, float[] prevInputs, bool[] changedInputs)
+        {
+
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            List<int> changedIndices = new List<int>();
+
+            // Identify changed indices
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (changedInputs[i])
+                {
+                    changedIndices.Add(i);
+                }
+            }
+
+            Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            // Create a copy of Z for comparison
+            float[] Z_Copy = new float[Z.Length];
+            Z.CopyTo(Z_Copy, 0);
+
+            Parallel.For(0, Biases.Length, neuron =>
+            {
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                fixed (float* pInputs = inputs, pInputsPrevious = prevInputs)
+                {
+                    // Process in chunks of vectorSize
+                    for (; i <= changedIndices.Count - vectorSize; i += vectorSize)
+                    {
+                        float[] changedInputChunk = new float[vectorSize];
+                        float[] previousInputChunk = new float[vectorSize];
+                        float[] weightsChunk = new float[vectorSize];
+
+                        // Fill the chunks
+                        for (int k = 0; k < vectorSize; k++)
+                        {
+                            int idx = changedIndices[i + k];
+                            changedInputChunk[k] = inputs[idx];
+                            previousInputChunk[k] = prevInputs[idx];
+                            weightsChunk[k] = Weights[idx, neuron]; // Indexing using row idx and column neuron
+                        }
+
+                        fixed (float* pChangedInputChunk = changedInputChunk, pPreviousInputChunk = previousInputChunk, pWeightsChunk = weightsChunk)
+                        {
+                            var inputVector = Avx.LoadVector256(pChangedInputChunk); // Load 8 elements from changed inputs into a SIMD register
+                            var previousInputVector = Avx.LoadVector256(pPreviousInputChunk); // Load 8 elements from previous inputs
+                            var weightsVector = Avx.LoadVector256(pWeightsChunk); // Load 8 elements from weights
+
+                            _calculations++;
+
+                            // Compute the products separately
+                            var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
+                            var inputProduct = Avx.Multiply(inputVector, weightsVector);
+
+                            // Perform the subtraction and addition
+                            var zVectorChunk = Vector256<float>.Zero;
+                            zVectorChunk = Avx.Subtract(zVectorChunk, previousProduct); // Subtract the previous contribution
+                            zVectorChunk = Avx.Add(zVectorChunk, inputProduct); // Add the new contribution
+
+                            // Apply the partial sum to Z at the correct indices
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                float zElement = zVectorChunk.GetElement(k);
+                                int idx = changedIndices[i + k];
+                                Z[neuron] += zElement;
+
+                                // Debugging intermediate results
+                                lock (Z_Copy) // Ensure thread-safe access to Z_Copy
+                                {
+                                    Z_Copy[neuron] += zElement;
+                                }
+                            }
+                        }
+                    }
+
+                    // Process any remaining elements that were not part of the full vectorSize chunks
+                    for (; i < changedIndices.Count; i++)
+                    {
+                        int idx = changedIndices[i];
+                        _calculations++;
+                        Z[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                        Z[neuron] += inputs[idx] * Weights[idx, neuron];
+
+                        // Debugging intermediate results
+                        lock (Z_Copy) // Ensure thread-safe access to Z_Copy
+                        {
+                            Z_Copy[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                            Z_Copy[neuron] += inputs[idx] * Weights[idx, neuron];
+                        }
+                    }
+
+                    // Apply activation function
+                    Activations[neuron] = ActivationFunction.Calculate(Z[neuron]);
+                }
+            });
+
+            stopwatch.Stop();
+            double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
+            Console.WriteLine("NNUE Forwardtime milliseconds" + seconds * 1000);
+
+            // Compare Z_Copy with Z to identify discrepancies
+            for (int i = 0; i < Z.Length; i++)
+            {
+                if (Math.Abs(Z[i] - Z_Copy[i]) > 0.001)
+                {
+                    Console.WriteLine($"Z values differ at [{i}]: {Z[i]} != {Z_Copy[i]}");
+                }
+            }
         }*/
+
+        private unsafe void ProcessWithAVX2NNUELock(float[] inputs, float[] prevInputs, bool[] changedInputs)
+        {
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            List<int> changedIndices = new List<int>();
+
+            // Identify changed indices
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (changedInputs[i])
+                {
+                    changedIndices.Add(i);
+                }
+            }
+
+            //Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            // Create a copy of Z for comparison
+            float[] Z_Copy = new float[Z.Length];
+            Z.CopyTo(Z_Copy, 0);
+
+            Parallel.For(0, Biases.Length, neuron =>
+            {
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                fixed (float* pInputs = inputs, pInputsPrevious = prevInputs)
+                {
+                    // Process in chunks of vectorSize
+                    for (; i <= changedIndices.Count - vectorSize; i += vectorSize)
+                    {
+                        float[] changedInputChunk = new float[vectorSize];
+                        float[] previousInputChunk = new float[vectorSize];
+                        float[] weightsChunk = new float[vectorSize];
+
+                        // Fill the chunks
+                        for (int k = 0; k < vectorSize; k++)
+                        {
+                            int idx = changedIndices[i + k];
+                            changedInputChunk[k] = inputs[idx];
+                            previousInputChunk[k] = prevInputs[idx];
+                            weightsChunk[k] = Weights[idx, neuron]; // Indexing using row idx and column neuron
+                        }
+
+                        fixed (float* pChangedInputChunk = changedInputChunk, pPreviousInputChunk = previousInputChunk, pWeightsChunk = weightsChunk)
+                        {
+                            var inputVector = Avx.LoadVector256(pChangedInputChunk); // Load 8 elements from changed inputs into a SIMD register
+                            var previousInputVector = Avx.LoadVector256(pPreviousInputChunk); // Load 8 elements from previous inputs
+                            var weightsVector = Avx.LoadVector256(pWeightsChunk); // Load 8 elements from weights
+
+                            _calculations++;
+
+                            // Compute the products separately
+                            var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
+                            var inputProduct = Avx.Multiply(inputVector, weightsVector);
+
+                            // Perform the subtraction and addition
+                            var zVectorChunk = Vector256<float>.Zero;
+                            zVectorChunk = Avx.Subtract(zVectorChunk, previousProduct); // Subtract the previous contribution
+                            zVectorChunk = Avx.Add(zVectorChunk, inputProduct); // Add the new contribution
+
+                            // Apply the partial sum to Z at the correct indices
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                float zElement = zVectorChunk.GetElement(k);
+                                int idx = changedIndices[i + k];
+                                Z[neuron] += zElement;
+
+                                // Debugging intermediate results
+                                lock (Z_Copy) // Ensure thread-safe access to Z_Copy
+                                {
+                                    Z_Copy[neuron] += zElement;
+                                }
+                            }
+                        }
+                    }
+
+                    // Process any remaining elements that were not part of the full vectorSize chunks
+                    for (; i < changedIndices.Count; i++)
+                    {
+                        int idx = changedIndices[i];
+                        _calculations++;
+                        Z[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                        Z[neuron] += inputs[idx] * Weights[idx, neuron];
+
+                        // Debugging intermediate results
+                        lock (Z_Copy) // Ensure thread-safe access to Z_Copy
+                        {
+                            Z_Copy[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                            Z_Copy[neuron] += inputs[idx] * Weights[idx, neuron];
+                        }
+                    }
+
+                    // Apply activation function
+                    Activations[neuron] = ActivationFunction.Calculate(Z[neuron]);
+                }
+            });
+
+            stopwatch.Stop();
+            double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
+            //Console.WriteLine("NNUE Forwardtime milliseconds" + seconds * 1000);
+
+            // Compare Z_Copy with Z to identify discrepancies
+            for (int i = 0; i < Z.Length; i++)
+            {
+                if (Math.Abs(Z[i] - Z_Copy[i]) > 0.001)
+                {
+                    Console.WriteLine($"Z values differ at [{i}]: {Z[i]} != {Z_Copy[i]}");
+                }
+            }
+        }
+
+
+        /*private unsafe void ProcessWithAVX2NNUENotParallell(float[] inputs, float[] prevInputs, bool[] changedInputs)
+        {            
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            List<int> changedIndices = new List<int>();
+
+            // Identify changed indices
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (changedInputs[i])
+                {
+                    changedIndices.Add(i);
+                }
+            }
+
+            Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            // For debugging purposes, we just check one neuron
+            for (int neuron = 0; neuron < Biases.Length; neuron++)
+            {
+                //var z_update_count = 0;
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                // List to collect log data for synchronization after parallel execution
+                List<string> logData = new List<string>();
+
+
+                fixed (float* pInputs = inputs, pInputsPrevious = prevInputs)
+                {
+                    // Process in chunks of vectorSize
+                    for (; i <= changedIndices.Count - vectorSize; i += vectorSize)
+                    {
+                        float[] changedInputChunk = new float[vectorSize];
+                        float[] previousInputChunk = new float[vectorSize];
+                        float[] weightsChunk = new float[vectorSize];
+
+                        // Fill the chunks
+                        for (int k = 0; k < vectorSize; k++)
+                        {
+                            int idx = changedIndices[i + k];
+                            changedInputChunk[k] = inputs[idx];
+                            previousInputChunk[k] = prevInputs[idx];
+                            weightsChunk[k] = Weights[idx, neuron]; // Indexing using row idx and column j
+                            //Console.WriteLine($"Z_subtract, {prevInputs[idx] * Weights[idx, neuron]} , {Z_subtract[idx, neuron]}");
+                            //Console.WriteLine($"Z_add, {inputs[idx] * Weights[idx, neuron]} , {Z_add[idx, neuron]}");
+                        }
+
+                        fixed (float* pChangedInputChunk = changedInputChunk, pPreviousInputChunk = previousInputChunk, pWeightsChunk = weightsChunk)
+                        {
+                            var inputVector = Avx.LoadVector256(pChangedInputChunk); // Load 8 elements from changed inputs into a SIMD register
+                            var previousInputVector = Avx.LoadVector256(pPreviousInputChunk); // Load 8 elements from previous inputs
+                            var weightsVector = Avx.LoadVector256(pWeightsChunk); // Load 8 elements from weights
+
+                            _calculations++;
+
+                            // Compute the products separately
+                            var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
+                            var inputProduct = Avx.Multiply(inputVector, weightsVector);
+
+                            // Log the products
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                int idx = changedIndices[i + k];
+                                //logData.Add($"i={i}, k={k}, previousProduct[{k}]: {previousProduct.GetElement(k)}, Z_subtract: {Z_subtract[idx, neuron]}");
+                                //logData.Add($"i={i}, k={k}, inputProduct[{k}]: {inputProduct.GetElement(k)}, Z_add: {Z_add[idx, neuron]}");
+                            }
+
+                            // Perform the subtraction and addition
+                            var zVectorChunk = Vector256<float>.Zero;
+                            zVectorChunk = Avx.Subtract(zVectorChunk, previousProduct); // Subtract the previous contribution
+                            zVectorChunk = Avx.Add(zVectorChunk, inputProduct); // Add the new contribution
+
+                            // Apply the partial sum to Z_Clone at the correct indices
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                float zElement = zVectorChunk.GetElement(k);
+                                int idx = changedIndices[i + k];
+
+                                // Applying the update to Z_Clone at the correct index
+                                Z[neuron] += zElement;
+                            }
+                        }
+                    }
+                    
+                    // Process any remaining elements that were not part of the full vectorSize chunks
+                    for (; i < changedIndices.Count; i++)
+                    {
+                        int idx = changedIndices[i];
+                        _calculations++;
+
+                        Z[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                        Z[neuron] += inputs[idx] * Weights[idx, neuron];
+                    }
+
+                    Activations[neuron] = ActivationFunction.Calculate(Z[neuron]);
+                }
+
+                // Output collected log data
+                Console.WriteLine(string.Join(Environment.NewLine, logData));
+            }
+            stopwatch.Stop();
+            double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
+            Console.WriteLine("NNUE Forwardtime milliseconds" + seconds*1000);
+        }*/
+
+        private unsafe void ProcessWithAVX2NNUEDebug(float[] inputs, float[] prevInputs, bool[] changedInputs, float[] Z_Clone, float[,] Z_subtract, float[,] Z_add, float[,] Z_add_Hist)
+        {
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            List<int> changedIndices = new List<int>();
+            //Console.WriteLine("Z Clone[0] before processing: " + Z_Clone[0]);
+
+            // Identify changed indices
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (changedInputs[i])
+                {
+                    changedIndices.Add(i);
+                }
+            }
+
+            List<float> z_updates = new List<float>();
+            List<float> z_updates_expected = new List<float>();
+            foreach (var changedInput in changedIndices)
+            {
+                var diff = Z_add[changedInput, 0] - Z_subtract[changedInput, 0];
+                z_updates_expected.Add(diff);
+            }
+
+            // Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
+            // For debugging purposes, we just check one neuron
+            for (int neuron = 0; neuron < Biases.Length; neuron++)
+            {
+                var z_update_count = 0;
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                // List to collect log data for synchronization after parallel execution
+                List<string> logData = new List<string>();
+
+
+                fixed (float* pInputs = inputs, pInputsPrevious = prevInputs)
+                {
+                    // Process in chunks of vectorSize
+                    for (; i <= changedIndices.Count - vectorSize; i += vectorSize)
+                    {
+                        float[] changedInputChunk = new float[vectorSize];
+                        float[] previousInputChunk = new float[vectorSize];
+                        float[] weightsChunk = new float[vectorSize];
+
+                        // Fill the chunks
+                        for (int k = 0; k < vectorSize; k++)
+                        {
+                            int idx = changedIndices[i + k];
+                            changedInputChunk[k] = inputs[idx];
+                            previousInputChunk[k] = prevInputs[idx];
+                            weightsChunk[k] = Weights[idx, neuron]; // Indexing using row idx and column j
+                            //Console.WriteLine($"Z_subtract, {prevInputs[idx] * Weights[idx, neuron]} , {Z_subtract[idx, neuron]}");
+                            //Console.WriteLine($"Z_add, {inputs[idx] * Weights[idx, neuron]} , {Z_add[idx, neuron]}");
+                        }
+
+                        fixed (float* pChangedInputChunk = changedInputChunk, pPreviousInputChunk = previousInputChunk, pWeightsChunk = weightsChunk)
+                        {
+                            var inputVector = Avx.LoadVector256(pChangedInputChunk); // Load 8 elements from changed inputs into a SIMD register
+                            var previousInputVector = Avx.LoadVector256(pPreviousInputChunk); // Load 8 elements from previous inputs
+                            var weightsVector = Avx.LoadVector256(pWeightsChunk); // Load 8 elements from weights
+
+                            _calculations++;
+
+                            // Compute the products separately
+                            var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
+                            var inputProduct = Avx.Multiply(inputVector, weightsVector);
+
+                            // Log the products
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                int idx = changedIndices[i + k];
+                                //logData.Add($"i={i}, k={k}, previousProduct[{k}]: {previousProduct.GetElement(k)}, Z_subtract: {Z_subtract[idx, neuron]}");
+                                //logData.Add($"i={i}, k={k}, inputProduct[{k}]: {inputProduct.GetElement(k)}, Z_add: {Z_add[idx, neuron]}");
+                            }
+
+                            // Perform the subtraction and addition
+                            var zVectorChunk = Vector256<float>.Zero;
+                            zVectorChunk = Avx.Subtract(zVectorChunk, previousProduct); // Subtract the previous contribution
+                            zVectorChunk = Avx.Add(zVectorChunk, inputProduct); // Add the new contribution
+
+                            // Apply the partial sum to Z_Clone at the correct indices
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                float zElement = zVectorChunk.GetElement(k);
+                                int idx = changedIndices[i + k];
+
+                                /*
+                                // Check for unexpected update
+                                if (Math.Abs(zElement - z_updates_expected[z_update_count]) > 0.01f)
+                                {
+                                    logData.Add($"Unexpected update {z_update_count}, {zElement}, {z_updates_expected[z_update_count]}");
+                                }*/
+
+                                // Logging the change
+                                //logData.Add($"Z Change at index {idx}: {zElement}");
+
+                                // Applying the update to Z_Clone at the correct index
+                                Z_Clone[neuron] += zElement;
+
+                                /*
+                                // Check for unexpected update
+                                if (Math.Abs(Z_Clone[neuron] - Z_add_Hist[z_update_count, neuron]) > 0.01f)
+                                {
+                                    logData.Add($"Z update count {z_update_count} neuron {neuron}");
+                                    logData.Add($"Unexpected Z hist {Z_Clone[neuron]}, {Z_add_Hist[z_update_count, neuron]}");
+                                }*/
+
+                                // Increment the z_update_count to move to the next expected update
+                                z_update_count++;
+                            }
+
+                            /*
+                            // Log the zVectorChunk after each operation
+                            for (int k = 0; k < vectorSize; k++)
+                            {
+                                logData.Add($"i={i}, k={k}, zVectorChunk[{k}] after sub/add: {zVectorChunk.GetElement(k)}");
+                                z_updates.Add(zVectorChunk.GetElement(k));
+                            }*/
+                        }
+                    }
+
+
+                    // Print Z_Clone after SIMD operations
+                    //logData.Add($"Z_Clone[{neuron}] after SIMD operations: {Z_Clone[neuron]}");
+                    //logData.Add($"i {i}");
+                    // Process any remaining elements that were not part of the full vectorSize chunks
+                    for (; i < changedIndices.Count; i++)
+                    {
+                        int idx = changedIndices[i];
+                        _calculations++;
+                        /*
+                        logData.Add($"Remaining! i={i}, idx={idx}");
+                        logData.Add($"Changed Input: {inputs[idx]}");
+                        logData.Add($"Previous Input: {prevInputs[idx]}");
+                        logData.Add($"Weight: {Weights[idx, neuron]}");
+                        logData.Add($"Z_subtract: {prevInputs[idx] * Weights[idx, neuron]}");
+                        logData.Add($"Z_add: {inputs[idx] * Weights[idx, neuron]}");*/
+
+                        Z_Clone[neuron] -= prevInputs[idx] * Weights[idx, neuron];
+                        Z_Clone[neuron] += inputs[idx] * Weights[idx, neuron];
+                        // Check for unexpected update
+
+                        if (Math.Abs(Z_Clone[neuron] - Z_add_Hist[i, neuron]) > 0.01f)
+                        {
+                            logData.Add($"Unexpected Z hist {Z_Clone[neuron]}, {Z_add_Hist[i, neuron]}");
+                        }
+
+                        //z_update_count++;
+                    }
+
+                    // Print Z_Clone after processing remaining elements
+                    // logData.Add($"Z_Clone[{neuron}] after processing remaining elements: {Z_Clone[neuron]}");
+
+                    // Check for significant differences and apply activation function
+                    if (Math.Abs(Z_Clone[neuron] - Z[neuron]) > 0.001)
+                    {
+                        logData.Add($"Z Clone {Z_Clone[neuron]} , Z {Z[neuron]}");
+                        logData.Add($"Z hist {Z_add_Hist[i - 1, neuron]}");
+                        Console.WriteLine(string.Join(Environment.NewLine, logData));
+                        Environment.Exit(0);
+                    }
+
+                    Activations[neuron] = ActivationFunction.Calculate(Z_Clone[neuron]);
+                }
+
+                // Output collected log data
+                Console.WriteLine(string.Join(Environment.NewLine, logData));
+
+
+            }
+            stopwatch.Stop();
+            Console.WriteLine("NNUE Forwardtime" + stopwatch.ElapsedMilliseconds);
+
+        }
+
+
+
+        /// <summary>
+        /// Calculate the new activation by finding out which inputs differs from previous inputs
+        /// For those inputs that differs we subtract their previous contribution to next layer and add the new contribution
+        /// All other inputs remain the same
+        /// Z will be updated with new activation level that is used for the Activation Function
+        /// After calculating the new activations we update _ZPrevious, _inputsPrevious[i] with current Z, inputs
+        /// 
+        /// This version is slow but can be valuable for com
+        /// </summary>
+        /// <param name="inputs"></param>
+        /// <returns>The new activation (temporarily Z_subtract Z_add for debug)</returns>
+        public (float[], float[,], float[,], float[,]) FeedForwardNNUEOld(float[] inputs, int inputDiffCount)
+        {
+            _Logger.Information("\nNNUE forward" + inputs.Length);
+            _Logger.Information("\nInputs" + string.Join(", ", inputs));
+            //_Logger.Information($"Biases: {Biases.Length} Firstpass {_firstPass}");
+            var historyIndex = _forwardCount % _HistoryLength;
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+
+            Array.Copy(_ZPrevious, Z, _ZPrevious.Length);
+            var Z_subtract = new float[inputs.Length, Biases.Length];
+            var Z_add = new float[inputs.Length, Biases.Length];
+            var Z_adding_history = new float[inputDiffCount, Biases.Length];
+            _calculations = 0;
+            _skippedCalculations = 0;
+            Console.WriteLine("Z(0)" + Z[0]);
+            for (int j = 0; j < Biases.Length; j++)
+            {
+                int diffInputCount = 0;
+
+                for (int i = 0; i < inputs.Length; i++)
+                {
+                    if (inputs[i] != _inputsPrevious[i])
+                    {
+                        _calculations++;
+                        Z[j] -= _inputsPrevious[i] * Weights[i, j];
+                        _Logger.Information($"inp{i}:{inputs[i]} * W {Weights[i, j]} ,Z(j): {Z[j]}");
+                        Z_subtract[i, j] = _inputsPrevious[i] * Weights[i, j];
+                        // For the First Pass add new contribution from input 
+                        Z[j] += inputs[i] * Weights[i, j];
+                        _Logger.Information($"FIRSTP inp{i}:{inputs[i]} * W {Weights[i, j]} ,Z(j): {Z[j]}");
+                        Z_add[i, j] = inputs[i] * Weights[i, j];
+                        Z_adding_history[diffInputCount, j] = Z[j];
+                        if (j == 0)
+                        {
+                            Console.WriteLine("Z(j)" + Z[j] + " Diffinputc: " + diffInputCount);
+                            Z_adding_history[diffInputCount, j] = Z[j];
+                        }
+                        diffInputCount++;
+                    }
+                    else
+                    {
+                        _skippedCalculations++;
+                    }
+                }
+
+                // We dont need to add bias since it can't change between two forwardpass
+                _Logger.Information($"\n Z(j) {j} , {Z[j]}");
+                Activations[j] = ActivationFunction.Calculate(Z[j]); // Apply activation function
+                _ActivationsHistory[j, historyIndex] = Activations[j];
+                _Logger.Information($"\n ACT(j) {j} , {Activations[j]}");
+            }
+
+            Array.Copy(Z, _ZPrevious, Z.Length);                // Update _ZPrevious for next pass
+            Array.Copy(inputs, _inputsPrevious, inputs.Length); // Update _inputsPrevious for next pass
+            Console.WriteLine("calc" + _calculations + " ,skipped" + _skippedCalculations);
+
+            stopwatch.Stop();
+            forwardTime += stopwatch.ElapsedTicks;
+            _forwardCount++;
+            return (Activations, Z_subtract, Z_add, Z_adding_history);
+        }
 
         private unsafe void ProcessWithAVX(float[] inputs, float[] weights, ref float z, int inputLength)
         {
@@ -365,6 +1239,68 @@ namespace Backgammon.Models.NeuralNetwork
             }
             return weightsForNeuron;
         }
+
+        /*
+        private unsafe void ProcessWithAVX2NNUE(float[] inputs)
+        {
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            for (int j = 0; j < Biases.Length; j++)
+            {
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                fixed (float* pInputs = inputs, pWeights = Weights, pZ = Z, pInputsPrevious = _inputsPrevious)
+                {
+                    for (; i <= inputs.Length - vectorSize; i += vectorSize)
+                    {
+                        var inputVector = Avx.LoadVector256(pInputs + i); // Load 8 elements from inputs into a SIMD register
+                        var previousInputVector = Avx.LoadVector256(pInputsPrevious + i); // Load 8 elements from previous inputs
+                        var weightsVector = Avx.LoadVector256(pWeights + i * Biases.Length + j); // Load 8 elements from weights
+
+                        var diff = Avx.CompareNotEqual(inputVector, previousInputVector); // Compare the input vectors
+                        int mask = Avx.MoveMask(diff); // Create a bitmask from the comparison result
+
+                        if (mask != 0) // If any elements are different
+                        {
+                            _calculations++;
+                            zVector = Avx.Subtract(zVector, Avx.Multiply(previousInputVector, weightsVector)); // Subtract the previous contribution
+                            zVector = Avx.Add(zVector, Avx.Multiply(inputVector, weightsVector)); // Add the new contribution
+                        }
+                        else
+                        {
+                            _skippedCalculations++;
+                        }
+                    }
+
+                    // Sum up the elements of the vector
+                    float sum = 0;
+                    for (int k = 0; k < vectorSize; k++)
+                    {
+                        sum += zVector.GetElement(k);
+                    }
+
+                    for (; i < inputs.Length; i++)
+                    {
+                        if (inputs[i] != _inputsPrevious[i])
+                        {
+                            _calculations++;
+                            Z[j] -= _inputsPrevious[i] * Weights[i, j];
+                            Z[j] += inputs[i] * Weights[i, j];
+                        }
+                        else
+                        {
+                            _skippedCalculations++;
+                        }
+                    }
+
+                    Z[j] += Biases[j];
+                    Activations[j] = ActivationFunction.Calculate(Z[j]);
+                    //_ActivationsHistory[j, historyIndex] = Activations[j];
+                }
+            }
+        }*/
+
+        /*
         public virtual float[] FeedForwardOld(float[] inputs)
         {
             //_Logger.Information("\nforward" + inputs.Length);
@@ -398,7 +1334,7 @@ namespace Backgammon.Models.NeuralNetwork
             forwardTime += stopwatch.ElapsedTicks;
             _forwardCount++;
             return Activations;
-        }
+        }*/
 
         // Example in C# for analyzing activations in a layer
         public bool IsNeuronDead()
@@ -407,10 +1343,96 @@ namespace Backgammon.Models.NeuralNetwork
             return testActivations.All(a => a == 0);
         }
 
-        public float[] BackpropagateOld(float[] outputErrors, float learningRate, float[] previousLayerActivations, float lassoLambda)
+        public float[] Backpropagate(float[] outputErrors, float learningRate, float[] previousLayerActivations, float lassoLambda)
         {
             float[] deltas = new float[outputErrors.Length];
-            //_ActivationsHistory ??= new float[outputErrors.Length, _HistoryLength];
+            float deltaClipValue = 1.0f; // Example threshold
+
+            // Calculate delta for each neuron (error * derivative of activation function)
+            Parallel.For(0, outputErrors.Length, i =>
+            {
+                deltas[i] = outputErrors[i] * ActivationFunction.CalculateDerivative(Z[i]);
+                if (float.IsNaN(deltas[i]) || float.IsInfinity(deltas[i]))
+                {
+                    _Logger.Information($"output errors {outputErrors[i]}");
+                    _Logger.Information($"deltas i = {i} delta i {deltas[i]} , nr outputs {deltas.Length} ");
+                    throw new InvalidOperationException("NaN or Infinity detected in deltas during backpropagation");
+                }
+
+                if (Math.Abs(deltas[i]) > deltaClipValue)
+                {
+                    _Logger.Information($"output errors {outputErrors[i]}");
+                    _Logger.Information($"clip extreme, i {i} delta i {deltas[i]} , {deltas.Length} ");
+                    deltas[i] = Math.Clamp(deltas[i], -deltaClipValue, deltaClipValue);
+                }
+            });
+            
+            // Prepare to calculate errors for the previous layer
+            float[] previousLayerErrors = new float[previousLayerActivations.Length];
+
+            if (!_useBatchTraining)
+            {
+                // Since we will make weight changes dont use nnue next forward pass               
+                _NNUEIsForwardReady = false;
+            }
+
+            // Update weights, biases, and calculate errors for the previous layer
+            Parallel.For(0, Weights.GetLength(0), i =>
+            {
+                for (int j = 0; j < Weights.GetLength(1); j++)
+                {
+                    // Lasso regularization adjustment
+                    float lassoAdjustment = lassoLambda * (Weights[i, j] > 0 ? 1 : (Weights[i, j] < 0 ? -1 : 0));
+                    // Adjust weights by delta * input from previous layer and Lasso regularization
+                    var pre = Math.Abs(Weights[i, j]);
+                    var wUpdate = learningRate * (deltas[j] * previousLayerActivations[i] + lassoAdjustment);
+                    if (_useBatchTraining)
+                    {
+                        _batchWeightUpdates[i, j] += wUpdate;
+                    }
+                    else
+                    {
+                        Weights[i, j] -= wUpdate;
+                    }
+                    if (Math.Abs(Weights[i, j]) > pre)
+                    {
+                        _wInc++;
+                    }
+                    else if (Math.Abs(Weights[i, j]) < pre)
+                    {
+                        _wDec++;
+                    }
+                    else
+                    {
+                        _wNothing++;
+                    }
+
+                    // Accumulate the error for the previous layer's neuron 'i'
+                    previousLayerErrors[i] += deltas[j] * Weights[i, j];
+                }
+            });
+
+            Parallel.For(0, Biases.Length, i =>
+            {
+                if (_useBatchTraining)
+                {
+                    _batchBiasUpdates[i] += learningRate * deltas[i];
+                }
+                else
+                {
+                    // Adjust biases by delta
+                    Biases[i] -= learningRate * deltas[i];
+                }
+            });
+
+            // Return the calculated errors for the previous layer
+            return previousLayerErrors;
+        }
+
+        /*
+        public float[] BackpropagateNoParalell(float[] outputErrors, float learningRate, float[] previousLayerActivations, float lassoLambda)
+        {
+            float[] deltas = new float[outputErrors.Length];
             float deltaClipValue = 1.0f; // Example threshold
 
             // Calculate delta for each neuron (error * derivative of activation function)
@@ -474,8 +1496,8 @@ namespace Backgammon.Models.NeuralNetwork
                     }
 
                     // Console.WriteLine("W")
-                    /*// Adjust weights by delta * input from previous layer
-                    Weights[i, j] -= learningRate * deltas[j] * previousLayerActivations[i];*/
+                    // Adjust weights by delta * input from previous layer
+                    // Weights[i, j] -= learningRate * deltas[j] * previousLayerActivations[i];
 
                     // Accumulate the error for the previous layer's neuron 'i'
                     previousLayerErrors[i] += deltas[j] * Weights[i, j];
@@ -497,7 +1519,7 @@ namespace Backgammon.Models.NeuralNetwork
 
             // Return the calculated errors for the previous layer
             return previousLayerErrors;
-        }
+        }*/
 
         private float clipValue(float val, float max)
         {
@@ -512,15 +1534,17 @@ namespace Backgammon.Models.NeuralNetwork
             return max;
         }
 
-        public void BatchUpdate(int batchSize) {
-           AdamBatchUpdate();
+        public void BatchUpdate(int batchSize)
+        {
+            AdamBatchUpdate();
         }
 
+        /*
         public void BatchUpdateOld(int batchSize)
         {
             if (batchSize <= 0) throw new ArgumentException("Batch size must be positive", nameof(batchSize));
             float learnRate = 0.02f;
-            float batchDivider = (float)Math.Sqrt(batchSize)/learnRate;
+            float batchDivider = (float)Math.Sqrt(batchSize) / learnRate;
             float maxWeightUpdate = 0.1f;
             for (int i = 0; i < Weights.GetLength(0); i++)
             {
@@ -545,7 +1569,7 @@ namespace Backgammon.Models.NeuralNetwork
                 Biases[biasCount] -= averageBiasUpdate;
                 _prevBiasUpdates[biasCount] = averageBiasUpdate; // Store this update for next iteration's momentum
             }
-        }
+        }*/
 
         private float FindMaxGradient(float[,] gradients)
         {
@@ -567,8 +1591,12 @@ namespace Backgammon.Models.NeuralNetwork
         public void AdamBatchUpdate(float learningRate = 0.0001f, float beta1 = 0.85f, float beta2 = 0.999f, float epsilon = 1e-8f)
         {
             if (_batchWeightUpdates == null || _batchBiasUpdates == null) throw new InvalidOperationException("Batch updates must be computed before calling AdamBatchUpdate");
+            
+            // Since we will make weight changes dont use nnue next forward psss
+            _NNUEIsForwardReady = false;
 
-            /*// Initialize moment vectors and timestep if not already done
+
+            /* // Initialize moment vectors and timestep if not already done
             if (_m == null)
             {
                 _m = new float[Weights.GetLength(0), Weights.GetLength(1)];
@@ -623,7 +1651,10 @@ namespace Backgammon.Models.NeuralNetwork
 
         public void BatchUpdateAdam2(int batchSize)
         {
+
             if (batchSize <= 0) throw new ArgumentException("Batch size must be positive", nameof(batchSize));
+            // Since we will make weight changes dont use nnue next forward psss
+            _NNUEIsForwardReady = false;
 
             // Update timestep
             _t++;
@@ -677,6 +1708,8 @@ namespace Backgammon.Models.NeuralNetwork
             float maxGradient = gradients.Max(x => Math.Abs(x));
             return maxGradient;
         }
+
+        /*
         public virtual float[] FeedForwardNoAvx(float[] inputs)
         {
             int inputLength = inputs.Length;
@@ -724,92 +1757,128 @@ namespace Backgammon.Models.NeuralNetwork
             _forwardCount++;
 
             return activations; // Return local activations array
+        }*/
+
+        /*
+private void CompareNNUEOldAndNew(float[] inputs)
+{
+    // Save state
+    var originalZ = (float[])Z.Clone();
+    var originalZPrevious = (float[])_ZPrevious.Clone();
+    var originalInputs = (float[])_inputsPrevious.Clone();
+
+    // Run old method
+    FeedForwardNNUEOld(inputs);
+
+    // Compare results
+    for (int j = 0; j < Biases.Length; j++)
+    {
+        Console.WriteLine($"Neuron {j}: New Z[j]={Z[j]}, Old Z[j]={originalZ[j]}");
+        if (Math.Abs(Z[j] - originalZ[j]) > 1e-5)
+        {
+            Console.WriteLine($"Discrepancy found at neuron {j}: New Z={Z[j]}, Old Z={originalZ[j]}");
         }
     }
-}
 
-/*public float[] Backpropagate(float[] outputErrors, float learningRate, float[] previousLayerActivations, float lassoLambda)
+    // Restore state
+    Array.Copy(originalZPrevious, _ZPrevious, originalZPrevious.Length);
+    Array.Copy(originalInputs, _inputsPrevious, originalInputs.Length);
+    Z = originalZ;
+}*/
+
+        /*
+        private unsafe void ProcessWithAVX2NNUE(float[] inputs, bool[] changedInputs)
         {
-            InitAdam();
-            t++; // Increment timestep at each call
-            
-            float[] deltas = new float[outputErrors.Length];
+            int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
+            List<int> changedIndices = new List<int>();
+            var zClone = (float[])Z.Clone();
 
-            // Existing delta calculation...
-            float deltaClipValue = 1.0f; // Example threshold
-
-            // Calculate delta for each neuron (error * derivative of activation function)
-            for (int i = 0; i < outputErrors.Length; i++)
+            // Identify changed indices
+            for (int i = 0; i < inputs.Length; i++)
             {
-                deltas[i] = outputErrors[i] * ActivationFunction.CalculateDerivative(Z[i]);
-                if (float.IsNaN(deltas[i]) || float.IsInfinity(deltas[i]))
+                if (changedInputs[i])
                 {
-                    Console.WriteLine($"output errors {outputErrors[i]}");
-                    Console.WriteLine($"deltas i = {i} delta i {deltas[i]} , nr outputs {deltas.Length} ");
-                    throw new InvalidOperationException("NaN or Infinity detected in deltas during backpropagation");
-                }
-
-                if (Math.Abs(deltas[i]) > deltaClipValue)
-                {
-                    Console.WriteLine($"output errors {outputErrors[i]}");
-                    Console.WriteLine($"clip extre, i {i} delta i {deltas[i]} , {deltas.Length} ");
-                    if (deltas[i] > deltaClipValue)
-                        deltas[i] = deltaClipValue;
-                    else if (deltas[i] < -deltaClipValue)
-                        deltas[i] = -deltaClipValue;
+                    changedIndices.Add(i);
                 }
             }
+            Console.WriteLine("Changed inputs count: " + changedIndices.Count);
 
-            float[] previousLayerErrors = new float[previousLayerActivations.Length];
-
-            for (int i = 0; i < Weights.GetLength(0); i++)
+            for (int j = 0; j < Biases.Length; j++)
             {
-                for (int j = 0; j < Weights.GetLength(1); j++)
+                Vector256<float> zVector = Vector256<float>.Zero; // Initialize the accumulation vector to zero
+                int i = 0;
+
+                fixed (float* pInputs = inputs, pWeights = Weights, pInputsPrevious = _inputsPrevious)
                 {
-                    // Compute gradient
-                    float gradient = deltas[j] * previousLayerActivations[i] + lassoLambda * (Weights[i, j] > 0 ? 1 : (Weights[i, j] < 0 ? -1 : 0));
+                    // Process in chunks of vectorSize
+                    for (; i <= changedIndices.Count - vectorSize; i += vectorSize)
+                    {
+                        float[] changedInputChunk = new float[vectorSize];
+                        float[] previousInputChunk = new float[vectorSize];
+                        float[] weightsChunk = new float[vectorSize];
 
-                    // Update first moment vector
-                    mWeights[i, j] = beta1 * mWeights[i, j] + (1 - beta1) * gradient;
+                        // Fill the chunks
+                        for (int k = 0; k < vectorSize; k++)
+                        {
+                            int idx = changedIndices[i + k];
+                            changedInputChunk[k] = inputs[idx];
+                            previousInputChunk[k] = _inputsPrevious[idx];
+                            weightsChunk[k] = Weights[idx, j];
+                        }
 
-                    // Update second moment vector
-                    vWeights[i, j] = beta2 * vWeights[i, j] + (1 - beta2) * (gradient * gradient);
+                        fixed (float* pChangedInputChunk = changedInputChunk, pPreviousInputChunk = previousInputChunk, pWeightsChunk = weightsChunk)
+                        {
+                            var inputVector = Avx.LoadVector256(pChangedInputChunk); // Load 8 elements from changed inputs into a SIMD register
+                            var previousInputVector = Avx.LoadVector256(pPreviousInputChunk); // Load 8 elements from previous inputs
+                            var weightsVector = Avx.LoadVector256(pWeightsChunk); // Load 8 elements from weights
+                            if (j == 0)
+                            {
+                                Console.WriteLine("Input Vector: " + string.Join(", ", Vector256ToArray(inputVector)));
+                                Console.WriteLine("Previous Input Vector: " + string.Join(", ", Vector256ToArray(previousInputVector)));
+                                Console.WriteLine("Weights Vector: " + string.Join(", ", Vector256ToArray(weightsVector)));
+                            }
+                            _calculations++;
+                            zVector = Avx.Subtract(zVector, Avx.Multiply(previousInputVector, weightsVector)); // Subtract the previous contribution
+                            zVector = Avx.Add(zVector, Avx.Multiply(inputVector, weightsVector)); // Add the new contribution
+                            if (j == 0)
+                            {
+                                Console.WriteLine("Z Vector after Subtract/Add: " + string.Join(", ", Vector256ToArray(zVector)));
+                            }
+                        }
+                    }
 
-                    // Compute bias-corrected first moment estimate
-                    float mHat = mWeights[i, j] / (float)(1 - Math.Pow(beta1, t));
+                    // Apply the partial sum to Z[j]
+                    for (int k = 0; k < vectorSize; k++)
+                    {
+                        Z[j] += zVector.GetElement(k);
+                    }
+                    if (j == 0)
+                    {
+                        Console.WriteLine("Z[j] after SIMD accumulation: " + Z[j]);
+                    }
 
-                    // Compute bias-corrected second moment estimate
-                    float vHat = vWeights[i, j] / (float)(1 - Math.Pow(beta2, t));
+                    // Process any remaining elements that were not part of the full vectorSize chunks
+                    for (; i < changedIndices.Count; i++)
+                    {
+                        int idx = changedIndices[i];
+                        _calculations++;
+                        Z[j] -= _inputsPrevious[idx] * Weights[idx, j];
+                        Z[j] += inputs[idx] * Weights[idx, j];
+                    }
 
-                    // Update weights
-                    Weights[i, j] -= learningRate * mHat / (float)(Math.Sqrt(vHat) + epsilon);
+                    Console.WriteLine("Z[j] after processing remaining elements: " + Z[j]);
 
-                    // Accumulate error for previous layer
-                    previousLayerErrors[i] += deltas[j] * Weights[i, j];
+                    // Add the bias and apply the activation function
+                    Z[j] += Biases[j];
+                    Console.WriteLine("Z[j] after adding bias: " + Z[j]);
+
+                    Activations[j] = ActivationFunction.Calculate(Z[j]);
+                    Console.WriteLine("Activation[j]: " + Activations[j]);
                 }
+                // Restore Z
+                Z = (float[])zClone.Clone();
             }
-
-            for (int i = 0; i < Biases.Length; i++)
-            {
-                // Calculate the gradient for bias; assuming L1 regularization might not directly apply to biases in this context
-                float gradient = deltas[i]; // Simple gradient for bias
-
-                // Update first moment vector for biases
-                mBiases[i] = beta1 * mBiases[i] + (1 - beta1) * gradient;
-
-                // Update second moment vector for biases
-                vBiases[i] = beta2 * vBiases[i] + (1 - beta2) * (gradient * gradient);
-
-                // Compute bias-corrected first moment estimate for biases
-                float mHatBiases = mBiases[i] / (float)(1 - Math.Pow(beta1, t));
-
-                // Compute bias-corrected second moment estimate for biases
-                float vHatBiases = vBiases[i] / (float)(1 - Math.Pow(beta2, t));
-
-                // Update biases
-                Biases[i] -= learningRate * mHatBiases / (float)(Math.Sqrt(vHatBiases) + epsilon);
-            }
-
-
-            return previousLayerErrors;
         }*/
+
+    }
+}

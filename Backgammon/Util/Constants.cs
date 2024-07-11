@@ -11,12 +11,16 @@
         {
             NoContact,
             Contact,
+            CompletedStage,
             Backgame12,
             Backgame13,
             Backgame23,
             OtherBackgame,
             FivePrime,
             SixPrime,
+            Crunched,
+            BearOff,
+            BearoffContact,
             BearOffDatabase
         }
     }

@@ -7,7 +7,9 @@ namespace Backgammon.Util
     {
         private static readonly float inputMin = -1;
         private static readonly float inputMax = 1;
-
+        // How likely are we to not enter with any checkers given number of innerboard points taken 0..6
+        private static readonly float[] danceProbabilites = { 0f, 1f/36, 1f/9, 0.25f, 16f/36, 25f/36, 1f };
+        
         public static int MapBoardToModel(int[] board)
         {
             return BackgammonBoard.StillContact(board) ? 1 : 0;
@@ -21,15 +23,20 @@ namespace Backgammon.Util
             }
             switch (positionType)
             {
-                case PositionType.NoContact:
+                case PositionType.BearOff:
                     // Code to handle Value1
                     return EncodeNoContactBoardToNeuralInputs(position);
+                case PositionType.NoContact:
+                    // Code to handle Value1
+                    return EncodeNoContactBoardToNeuralInputs(position);                
                 case PositionType.Backgame12://For now we only have two different input encoders
                     //return EncodeContactGameToNeuralInputs(position);
                 case PositionType.Backgame13:
                     //return EncodeContactGameToNeuralInputs(position);
                 case PositionType.Backgame23:
-                    //return EncodeContactGameToNeuralInputs(position);
+                //return EncodeContactGameToNeuralInputs(position);
+                case PositionType.OtherBackgame:
+                //return EncodeContactGameToNeuralInputs(position);
                 case PositionType.SixPrime:
                     //return EncodeContactGameToNeuralInputs(position);
                 case PositionType.FivePrime:
@@ -58,17 +65,18 @@ namespace Backgammon.Util
             (int p1PipCountBackGame, int p2PipCountBackGame) = BackgammonBoard.PipCountBackgameTiming(points);
             var encodedData = new List<(float[], string[])>
             {
-                EncodeBackgameTiming(p1PipCountBackGame, p2PipCountBackGame),
-                EncodeBorneOffDifferenceToNeuralInputs(points),
-                EncodeBoard1To24SemiSparseToNeuralInputs(points),
-                EncodeBarCheckersToNeuralInputs(points),
-                EncodeBorneOffDifferenceToNeuralInputsSparse(points),
-                EncodeBorneOffNeuralInputsSparse(points),
+                //Put the non binary inputs first ordered by how often they change
                 EncodePipCountPercentageNeuralInputs(p1PipCount, p2PipCount),
                 EncodePipCountDifferenceToNeuralInputsSparse(p1PipCount - p2PipCount, 15),
                 EncodePipCountDifferenceToNeuralInputsSparse(p1PipCount - p2PipCount, 50),
                 EncodePipCountDifferenceToNeuralInputsSparse(p1PipCount - p2PipCount, 150),
+                EncodeBackgameTiming(p1PipCountBackGame, p2PipCountBackGame),
                 EncodeSafePointsToNeuralInputSparse(points),//2 Inputs
+                EncodeBorneOffDifferenceToNeuralInputsSparse(points),
+                EncodeBorneOffNeuralInputsSparse(points),
+                EncodeBorneOffDifferenceToNeuralInputs(points),
+                EncodeBarCheckersToNeuralInputs(points),
+                
                 EncodePrimesToNeuralInput(points),// 6 Inputs (4,5,6 Prime)
                 EncodeBlotsToNeuralInputSparse(points),// 2 inputs
                 EncodeGammonSavePipCount(points),
@@ -76,7 +84,10 @@ namespace Backgammon.Util
                 EncodeGammonSaveCrossoverCountSparse(points),
                 EncodeInnerBoardStrength(points),
                 EncodeDirectHits(points),
-                EncodeGammonSavedNeuralInputs(points)
+                EncodeGammonSavedNeuralInputs(points),
+                EncodeRackStrengthInputs(points),
+                EncodeDeadCheckers(points),
+                EncodeBoard1To24ToNeuralInputs(points),
             };
 
             var combinedFeatures = new List<float>();
@@ -152,26 +163,24 @@ namespace Backgammon.Util
             return isPlayerOne ? scaledCheckers : -scaledCheckers;
         }
 
-        private static (float[] neuralInputs, string[] labels) EncodeBoard1To24SemiSparseToNeuralInputs(int[] points)
+        private static (float[] neuralInputs, string[] labels) EncodeBoard1To24ToNeuralInputs(int[] points)
         {
             var (encodedBlots, blotLabels) = EncodeBlotsToNeuralInputs(points);
             var (encodedSafePoints, safePointLabels) = EncodeSafePoints1to24ToNeuralInputs(points);
-            var encodedSpares = EncodeSparesToNeuralInputs(points);
-
+            var (encodedSpares, spareLabels) = EncodeSparesToNeuralInputs(points);
+            var (encodedSpares4and5, spares4and5Labels) = Encode4and5SparesInputs(points);
             var combinedFeatures = new List<float>();
             var combinedLabels = new List<string>();
 
             combinedFeatures.AddRange(encodedBlots);
             combinedFeatures.AddRange(encodedSafePoints);
             combinedFeatures.AddRange(encodedSpares);
+            combinedFeatures.AddRange(encodedSpares4and5);
 
             combinedLabels.AddRange(blotLabels);
             combinedLabels.AddRange(safePointLabels);
-            for (int i = 0; i < encodedSpares.Length; i++)
-            {
-                combinedLabels.Add($"Spares{i + 1}");
-            }
-
+            combinedLabels.AddRange(spareLabels);
+            combinedLabels.AddRange(spares4and5Labels);
             return (combinedFeatures.ToArray(), combinedLabels.ToArray());
         }
 
@@ -207,7 +216,38 @@ namespace Backgammon.Util
             return (neuralInputs, labels);
         }
 
-        private static float[] EncodeSparesToNeuralInputs(int[] points)
+        // The rack is true when 6, 5, 4 Point is taken but I want different strenghts for 6, 5..
+        private static (float[] neuralInputs, string[] labels) EncodeRackStrengthInputs(int[] points)
+        {
+            const int NumPoints = 12;
+            float[] neuralInputs = new float[NumPoints];
+            string[] labels = new string[NumPoints];
+            for (int i = 0; i < 6; i++)
+            {
+                if (points[BackgammonBoard.SixPointP1 - i] < 2)
+                    break;
+                neuralInputs[i] = inputMax;
+            }
+            for (int i = 0; i < 6; i++)
+            {
+                if (points[BackgammonBoard.SixPointP2 + i] > -2)
+                    break;
+                neuralInputs[i+6] = inputMax;
+            }
+
+            for (int i = 0; i < 6; i++) {
+                labels[i] = $"P1Rack{i + 1}";
+                labels[i+6] = $"P2Rack{i + 1}";
+            }
+                /*if (neuralInputs[3] == inputMax || neuralInputs[9] == inputMax) {
+                    Console.WriteLine("RACK" + string.Join(",", points));
+                    Console.WriteLine("inputs" + string.Join(",", neuralInputs));
+                }*/
+
+                return (neuralInputs, labels);
+        }
+
+        private static float[] EncodeSparesSparseToNeuralInputs(int[] points)
         {
             const int NumPoints = 24;
             const int InputsPerPoint = 2;
@@ -221,6 +261,70 @@ namespace Backgammon.Util
                 neuralInputs[i + NumPoints] = ScaleToRangeMinus1Plus1(sparesP2, 0, MaxSpares);
             }
             return neuralInputs;
+        }
+
+        // Most of the the time there will be only 3 spares on any point so lets have some special inputs for 6 and 7 spares
+        private static (float[], string[]) EncodeSparesToNeuralInputs(int[] points)
+        {
+            const int NumPoints = 24;
+            const int MaxSpares = 3;
+            const int InputsPerPoint = MaxSpares*2;
+            
+            float[] neuralInputs = new float[NumPoints * InputsPerPoint];
+            string[] labels = new string[NumPoints * InputsPerPoint];
+
+            for (int i = 0; i < NumPoints; i++)
+            {
+                int sparesP1 = Math.Min(Math.Max(points[BackgammonBoard.AcePointP1 + i] - 2, 0), MaxSpares);
+                for (int j = 0; j < sparesP1; j++) {
+                    neuralInputs[(i*InputsPerPoint) + j] = 1;        
+                }
+                
+                int sparesP2 = Math.Min(Math.Max(-points[BackgammonBoard.AcePointP1 + i] - 2, 0), MaxSpares);
+                for (int j = 0; j < sparesP2; j++)
+                {
+                    neuralInputs[(i * InputsPerPoint) + j + MaxSpares] = 1;
+                }
+                
+                for (int j = 0; j < MaxSpares; j++)
+                {
+                    labels[(i * InputsPerPoint) + j] = $"P1Spares{i+1},{j+1}";
+                    labels[(i * InputsPerPoint) + j + MaxSpares] = $"P2Spares{24 - i},{j+1}";
+                }
+            }
+            return (neuralInputs, labels);
+        }
+
+        
+        private static (float[], string[]) Encode4and5SparesInputs(int[] points)
+        {
+            float[] neuralInputs = new float[4];
+            string[] labels = { "P1Spares4", "P1Spares5", "P2Spares4", "P2Spares5" };
+
+            for (int i = 0; i < 24; i++)
+            {
+                int sparesP1 = points[BackgammonBoard.AcePointP1 + i] - 2;
+                if (sparesP1 >= 5)
+                {
+                    neuralInputs[0] = 1;
+                    neuralInputs[1] = 1;
+                }
+                else if (sparesP1 == 4) {
+                    neuralInputs[0] = 1;
+                }
+                
+                int sparesP2 = -points[BackgammonBoard.AcePointP1 + i] - 2;
+                if (sparesP2 >= 5)
+                {
+                    neuralInputs[0] = 1;
+                    neuralInputs[1] = 1;
+                }
+                else if (sparesP1 == 4)
+                {
+                    neuralInputs[0] = 1;
+                }                
+            }
+            return (neuralInputs, labels);
         }
 
         private static (float[] neuralInputs, string[] labels) EncodeBarCheckersToNeuralInputs(int[] board)
@@ -271,7 +375,7 @@ namespace Backgammon.Util
             {
                 ScaleDifferenceToInput(pipCountDifference, maxDifference),
             };
-            string[] labels = { "PipCountDifference" };
+            string[] labels = { "PipCountDifference"+maxDifference };
             return (neuralInputs, labels);
         }
 
@@ -562,8 +666,8 @@ namespace Backgammon.Util
             int crunchTreshold = 40;
             
             // If the timing is very small (lets say > 40) the crunch has already started so I think we can treat 0-40 as quite the same
-            var timingP1 = Math.Max((pipTimingP1 - crunchTreshold), 0);
-            var timingP2 = Math.Max((pipTimingP2 - crunchTreshold), 0);
+            var timingP1 = Math.Max(pipTimingP1 - crunchTreshold, 0);
+            var timingP2 = Math.Max(pipTimingP2 - crunchTreshold, 0);
             // Lets set a maxTiming for better normalization
             
             int maxTiming = 80;
@@ -740,8 +844,7 @@ namespace Backgammon.Util
                     
                 neuralInputs[i] = ScaleToRangeMinus1Plus1(checkersP1, 0, maxCheckersConsidered);
                 // Player 2's checkers, invert the sign of points since they are negative
-                neuralInputs[i+NumPoints] = ScaleToRangeMinus1Plus1(checkersP2, 0, maxCheckersConsidered);
-                
+                neuralInputs[i+NumPoints] = ScaleToRangeMinus1Plus1(checkersP2, 0, maxCheckersConsidered);                
             }
 
             string[] labels = new string[NumPoints * 2];
@@ -755,9 +858,9 @@ namespace Backgammon.Util
         }
 
         // Check possible direct hits can be  0..6 (6 if all die are a direct hit) 
-        public static int CountDirectHits(int[] board, int player)
+        public static int CountDirectHits(int[] points, int player)
         {
-            var (encodedDirectHits,_ )= EncodeDirectHits(board);
+            var (encodedDirectHits,_ ) = EncodeDirectHits(points);
             var hits = 0;
             for (int die = 0; die < 6; die++)
             {
@@ -769,5 +872,36 @@ namespace Backgammon.Util
             }
             return hits;
         }
+
+        // Count dead checkers if there are more than 2 checkers on 1 point we have dead checkers.
+        // if 1 point is taken and 3 there are more checkers than 2 on the 2 point we we have more dead checkers..
+        // Lets have 6 * 2 inputs counting max 6 dead checkers
+        public static (float[], string[]) EncodeDeadCheckers(int[] points) {
+            var maxDeadCheckers = 6;
+            float[] neuralInputs = new float[maxDeadCheckers * 2]; // 24 inputs representing the board state
+            
+            (var deadCheckersP1, var deadCheckersP2) = BackgammonBoard.DeadCheckers(points);
+            for (int i = 0; i < Math.Min(deadCheckersP1,maxDeadCheckers); i++) {
+                neuralInputs[i] = 1;
+            }
+
+            for (int i = 0; i < Math.Min(deadCheckersP2, maxDeadCheckers); i++)
+            {
+                neuralInputs[i+maxDeadCheckers] = 1;
+            }
+
+            string[] labels = new string[maxDeadCheckers * 2];
+            for (int i = 0; i < maxDeadCheckers; i++)
+            {
+                labels[i] = $"DeadCheckersP1_{i + 1}";
+                labels[maxDeadCheckers + i] = $"DeadCheckersP2_{i + 1}";
+            }
+            return (neuralInputs, labels);
+        }
+
+        // For bearoff situations we should see if there are more
+
+
+        // PrimeEncoding,
     }
 }

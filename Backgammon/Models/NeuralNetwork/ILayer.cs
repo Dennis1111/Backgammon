@@ -1,4 +1,4 @@
-﻿namespace Backgammon.Models
+﻿namespace Backgammon.Models.NeuralNetwork
 {
     internal interface ILayer
     {

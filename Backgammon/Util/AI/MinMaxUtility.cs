@@ -1,5 +1,4 @@
-﻿using Backgammon.Models.NeuralNetwork;
-using Backgammon.Models;
+﻿using Backgammon.Models;
 using Backgammon.Utils;
 using static Backgammon.Util.Constants;
 

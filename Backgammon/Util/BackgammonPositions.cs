@@ -171,27 +171,35 @@
         public static readonly int[] TwoThreeSplitOpening =
            [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 1, -5, 4, 0, 0, 0, -3, 0, -5, 0, 1, 0, 0, 1, 0, 0, 0];
 
+        public static readonly int[] TwoThreeDownOpening =
+           [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 1, 1, -5, 3, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0, 0, 0];
+        
+        public static readonly int[] FourThreeSplitOpening =
+            [0, -2, 0, 0, 0, 0, 5, 0, 3, 1, 0, 0, -5, 4, 0, 0, 0, -3, 0, -5, 0, 1, 0, 0, 1, 0, 0, 0];
+        
+        public static readonly int[] FourThreeDownOpening =
+            [0, -2, 0, 0, 0, 0, 5, 0, 3, 1, 1, 0, -5, 3, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0, 0, 0];
+        public static readonly int[] FourFiveSplitOpening =
+            [0, -2, 0, 0, 0, 0, 5, 0, 4, 0, 0, 0, -5, 4, 0, 0, 0, -3, 0, -5, 1, 0, 0, 0, 1, 0, 0, 0];
+        public static readonly int[] FourTwoPOpening =
+            [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -2, 0, -4, 0, -2, 0, 0, 2, 0, 0, 0];
         public static readonly int[] SixTwoSplitOpening =
             [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 1, -5, 4, 0, 0, 0, -3, 1, -5, 0, 0, 0, 0, 1, 0, 0, 0];
 
-        public static readonly int[] FourThreeSplitOpening =
-            [0, -2, 0, 0, 0, 0, 5, 0, 3, 1, 0, 0, -5, 4, 0, 0, 0, -3, 0, -5, 0, 1, 0, 0, 1, 0, 0, 0];
-
-        public static readonly int[] FourTwoPOpening =
-            [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -2, 0, -4, 0, -2, 0, 0, 2, 0, 0, 0];
-
         public static readonly int[] Nackgammon =
             [0, -2, -2, 0, 0, 0, 4, 0, 3, 0, 0, 0, -4, 4, 0, 0, 0, -3, 0, -4, 0, 0, 0, 2, 2, 0, 0, 0];
-
 
         public static readonly int[][] OpeningGames =
             [
             TwoOneSlotOpening,
             TwoOneSplitOpening,
             TwoThreeSplitOpening,
+            TwoThreeDownOpening,
             FourThreeSplitOpening,
-            SixTwoSplitOpening,
+            FourThreeDownOpening,
+            FourFiveSplitOpening,
             FourTwoPOpening,
+            SixTwoSplitOpening,          
             Nackgammon
             ];
 

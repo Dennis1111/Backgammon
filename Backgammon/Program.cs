@@ -1,10 +1,12 @@
 ﻿using Backgammon.GamePlay;
 using Backgammon.Models;
+using Backgammon.Models.NeuralNetwork;
 using Backgammon.Training;
 using Backgammon.Util;
 using Backgammon.Util.AI;
 using Newtonsoft.Json;
 using System.Diagnostics;
+using System.Numerics;
 using static Backgammon.Util.Constants;
 
 /*
@@ -54,6 +56,26 @@ static void testBearoffDatabaseMinMax(NeuralNetwork[] nn)
     Console.WriteLine(eq + "bear0ff" + String.Join(",", scoreVector));
     Console.WriteLine("Leafs: " + minMaxUtility.LeafCounter);
 }*/
+
+//Pos Evaluators where the nns are cloned
+static Dictionary<PositionType, IBackgammonPositionEvaluator> clonePosEvaluators(Dictionary<PositionType, IBackgammonPositionEvaluator> source) {
+    var positionNeuralEvalDictClone = new Dictionary<PositionType, IBackgammonPositionEvaluator>();
+
+    foreach (KeyValuePair<PositionType, IBackgammonPositionEvaluator> kvp in source)
+    {
+        if (kvp.Value is NeuralNetworkPositionEvaluator)
+        {
+            NeuralNetwork nn = ((NeuralNetworkPositionEvaluator)kvp.Value).NeuralNetwork;
+            var nnClone = nn.Clone();
+            positionNeuralEvalDictClone[kvp.Key] = new NeuralNetworkPositionEvaluator(nnClone, kvp.Key);
+        }
+        else {
+            positionNeuralEvalDictClone[kvp.Key] = kvp.Value;
+        }
+    }
+    return positionNeuralEvalDictClone;
+}
+
 // Retrieve the environment variable
 string dataPath = Environment.GetEnvironmentVariable("BG_DATA_PATH");
 
@@ -63,10 +85,10 @@ var logDir = Path.Combine(dataPath, "logs");
 //var names = NeuralNetworkManager.getModelNames();
 var positionEvaluatorDict = NeuralNetworkManager.GetBackgammonPosEvaluators(modelsDir, logDir);
 
+
 static string getBearOffFileName(string dir, int maxCheckers) {
     return Path.Combine(dir, "bearoff" + maxCheckers + ".json");
 }
-
 
 var jsonBearOffFilename = getBearOffFileName(modelsDir, BearOffUtility.MaxCheckers);
 {
@@ -87,7 +109,7 @@ if (bearOffDatabase is null || bearOffDatabase.Count() == 0)
     var bearOffDictSmaller = new Dictionary<string, float[]>();
     var jsonBearOffFilenameSmaller = getBearOffFileName(modelsDir, BearOffUtility.MaxCheckers-1);
 
-    // Read the JSON string from a file
+    //Read the JSON string from a file
     //var createDatabase = false;
     //for (int i = BeafOffUtility.MaxCheckers; i >= 1; i--)
     {
@@ -108,29 +130,44 @@ if (bearOffDatabase is null || bearOffDatabase.Count() == 0)
     File.WriteAllText(jsonBearOffFilename, json);
 }
 
-
 var bearOffEvaluator = new BearoffDatabaseEvaluator(bearOffDatabase);
 positionEvaluatorDict.Add(PositionType.BearOffDatabase, bearOffEvaluator);
 
-//var models = NeuralNetworkManager.getNeuralNetworks(modelsDir, logDir);
-
-//testEval(models);
-//testMinMax(models);
 var gameLogs = Path.Combine(dataPath, "logs", "games.log");
 
 var gameSimulator = new GameSimulator(positionEvaluatorDict, logDir);
+
+var moneyGame = gameSimulator.PlayMoneygame();
+gameSimulator.exportGameToFile(moneyGame);
+
+/*var clonedEvaluators = clonePosEvaluators(positionEvaluatorDict);
+foreach (var move in moneyGame.MoveData) {
+    var position = move.BoardBefore;
+    var positionType = BackgammonBoard.MapBoardToPositionType(position);
+    var nn = ((NeuralNetworkPositionEvaluator)positionEvaluatorDict[positionType]).NeuralNetwork;
+    var nnClone = ((NeuralNetworkPositionEvaluator)clonedEvaluators[positionType]).NeuralNetwork;
+    Console.WriteLine("Compare after clone: " + positionType);
+    nn.Compare(nnClone);
+    var (inputData, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(position, positionType, 0);    
+    nn.FeedForward(inputData);
+    nnClone.FeedForwardNNUE(inputData);
+    Console.WriteLine("Compare after feedforward");
+    nn.Compare(nnClone);
+}
+Environment.Exit(0);*/
+
 var gameDataTrainLogs = Path.Combine(logDir, "trainData.log");
 var gameDataTrainer = new GameDataTrainer(positionEvaluatorDict, gameDataTrainLogs);
 
 var totalPlayingTime = 0L;
 var totalTrainingTime = 0L;
 
-var nrOfTrainingGames = 2000;
-var trainFrequency = 5;
+var nrOfTrainingGames = 500;
+var trainFrequency = 2;
 var saveFrequency = 100;
 var maxExtraGames = 300; // When extraTrainPositions exceeds this we dont add any more
 var inspectLearningFrequency = 20;
-var batchLearningRate = 0.005f;
+var batchLearningRate = 0.02f;
 int epochs = 10;
 var trainingGamesData = new List<TrainingData>[nrOfTrainingGames];
 List<(int[], int)> extraTrainPositions = [];
@@ -186,6 +223,7 @@ for (int i = 0; i < 90000; i++)
         // var flatLists = new List<TrainingData>[2];
         
         Dictionary<PositionType, List<TrainingData>> trainingPatternsDict = [];
+        // We should maybe update the this list each epoch so we get new target values
         foreach (var elem in flatList) {
             var positionType = BackgammonBoard.MapBoardToPositionType(elem.board);
             if (positionType != PositionType.BearOffDatabase) {
@@ -207,18 +245,6 @@ for (int i = 0; i < 90000; i++)
             neuralNetwork.BatchUpdate(trainingPatterns, epochs);
         }
 
-        //flatLists[0] = flatList.Where(data => data.ModelIndex == 0).ToList();
-        //flatLists[1] = flatList.Where(data => data.ModelIndex == 1).ToList();
-        
-        // Assuming models is an array or list of your model objects
-        /* for (int modelIndex = 0; modelIndex < 2; modelIndex++)
-        {
-            var patterns = flatLists[modelIndex].Count;
-            Console.WriteLine($"Updating model {modelIndex} with {patterns} patterns.");
-            
-            if (flatLists[modelIndex].Count > 0)
-                models[modelIndex].BatchUpdate(flatLists[modelIndex], epochs);
-        }*/
     }
     stopwatchTrain.Stop();
     totalTrainingTime += stopwatchTrain.ElapsedMilliseconds;
@@ -277,6 +303,10 @@ for (int i = 0; i < 90000; i++)
                 neuralNetworkEvaluator.NeuralNetwork.Save(saveCounter);
             }
         }
+
+        moneyGame = gameSimulator.PlayMoneygame();
+        gameSimulator.exportGameToFile(moneyGame);
+
         //Code for checking that a loaded network behave the same
         //modelContact.Save(modelFile);
         //noContactModel.Save(modelNoContFile);

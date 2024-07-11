@@ -134,6 +134,25 @@ namespace Backgammon.Models
                 return " ";
         }
 
+        //Return the score from player1 1s perspective
+        public static int Score(int[] position, int cube) { 
+            var score = 0;
+            var scoreAsVector = ScoreAsVector(position);
+            if (scoreAsVector[2]==1)
+                return 3*cube;
+            if (scoreAsVector[1] == 1)
+                return 2 * cube;
+            if (scoreAsVector[0] == 1)
+                return 1 * cube;
+            if (scoreAsVector[5] == 1)
+                return -3 * cube;
+            if (scoreAsVector[4] == 1)
+                return -2 * cube;
+            if (scoreAsVector[3] == 1)
+                return -1 * cube;
+            return score;
+        }
+
         public static float[] ScoreAsVector(int[] position)
         {
             // Initialize the score vector as a float array
@@ -690,7 +709,7 @@ namespace Backgammon.Models
         // Method to generate all legal moves for a given pair of non-double dice rolls
         private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesNonDouble(int[] position, int die1, int die2, int player)
         {
-            Move emptyMove = new();
+            Move emptyMove = new(die1,die2, player);
             int searchFrom = 1; // Start looping from the ace point
             var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, position, searchFrom) };
 
@@ -726,7 +745,7 @@ namespace Backgammon.Models
 
         private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesDouble(int[] position, int die, int player)
         {
-            Move emptyMove = new();
+            Move emptyMove = new(die, die, player);
             int searchFrom = 1;
             var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, position, searchFrom) };
             var dies = new List<int> { die, die, die, die }; // Four times the same die value
@@ -868,7 +887,7 @@ namespace Backgammon.Models
             if (position[AcePointP1] <= -2 && position[DeucePointP1] <= -2)
                 return true;
             if (position[AcePointP2] >= 2 && position[DeucePointP2] >= 2)
-                return true;          
+                return true;
             return false;
         }
 
@@ -890,18 +909,149 @@ namespace Backgammon.Models
             return false;
         }
 
+        // We will call it a Backgame if opponent has any two points from ace to golden in opponents board
+        public static bool IsAnyBackgame(int[] position)
+        {
+            var player2BackgamePoints = 0;
+            var player1BackgamePoints = 0;
+            for (int i = 0; i < 5; i++)
+            {
+                if (position[AcePointP1 + i] <= -2)
+                    player2BackgamePoints++;
+                if (position[AcePointP2-i] >= 2)
+                    player1BackgamePoints++;
+            }
+            return player1BackgamePoints>=2 || player2BackgamePoints>=2;
+        }
+
+
+        //
+        public static bool IsCrunched(int[] position)
+        {
+            var player1CompletedStage = true;
+            for (int i = OnTheBarP1; i > MidPointP1; i--)
+            {
+                if (position[i] > 0)
+                {
+                    player1CompletedStage = false;
+                    break;
+                }
+            }
+
+            if (player1CompletedStage)
+            {
+                return true;
+            }
+
+            for (int i = OnTheBarP2; i < MidPointP2; i++)
+            {
+                if (position[i] < 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // When a players last checker has reached the midpoint or further its a completed stage
+        public static bool IsCompletedStage(int[] position)
+        {
+            var player1CompletedStage = true;
+            for (int i = OnTheBarP1; i > MidPointP1; i--) {
+                if (position[i] > 0) {
+                    player1CompletedStage = false;
+                    break;
+                }
+            }
+            
+            if (player1CompletedStage) { 
+                return true;
+            }
+            
+            for (int i = OnTheBarP2; i < MidPointP2; i++)
+            {
+                if (position[i] < 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static (int deadCheckersP1, int deadCheckersP2) DeadCheckers(int[] points) {
+            // Lets check 1 to 3 point for dead checkers
+            var deadCheckersP1 = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                var checkers = points[AcePointP1 + i];
+                if (checkers < 2)
+                {
+                    break;
+                }
+                if (checkers > 2)
+                {
+                    deadCheckersP1 += checkers - 2;
+                }
+            }
+
+            // Lets check 1 to 3 points for dead checkers
+            var deadCheckersP2 = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                var checkers = -points[AcePointP2 - i];
+                if (checkers < 2)
+                {
+                    break;
+                }
+                if (checkers > 2)
+                {
+                    deadCheckersP2 += checkers - 2;
+                }
+            }
+            return (deadCheckersP1, deadCheckersP2);
+        }
+
+        
+/*        public static bool isBearOffPos(int[] points) {
+            // Check player 1 first
+            var sumCheckers =0;
+            for (int =0)
+            return true;
+        }*/
+
         public static PositionType MapBoardToPositionType(int[] position)
         {
             if (!StillContact(position))
+            {
+                if (IsBearOffAllowed(position,Player1) && IsBearOffAllowed(position,Player2)) {
+                    return PositionType.BearOff;
+                }
                 return PositionType.NoContact;
-            //12,13,23 Backgames are the backgames with most critical timing
-            if (IsOneTwoBackgame(position))
-                return PositionType.Backgame12;
-            if (IsOneThreeBackgame(position))
-                return PositionType.Backgame13;
-            if (IsTwoThreeBackgame(position))
-                return PositionType.Backgame23;
+            }
 
+            (var deadCheckersP1, var deadCheckersP2) = DeadCheckers(position);
+            // 3 dead checkers is a small crunch start but should already greatly affect the gamestrategy,
+            // playing pure with more risks
+            if (deadCheckersP1 >= 3 || deadCheckersP2 >= 3) {
+                /*Console.WriteLine("Crunched stage");
+                var board = new BackgammonBoard();
+                board.Position = position;
+                Console.WriteLine(board);*/
+                return PositionType.Crunched;
+            }
+
+            //12,13,23 Backgames are the backgames with most critical timing
+            if (IsAnyBackgame(position))
+            {
+                if (IsOneTwoBackgame(position))
+                    return PositionType.Backgame12;
+                if (IsOneThreeBackgame(position))
+                    return PositionType.Backgame13;
+                if (IsTwoThreeBackgame(position))
+                    return PositionType.Backgame23;
+                return PositionType.OtherBackgame;
+            }
+            
             var primeP1 = CountPrimes(position, Player1);
             var primeP2 = CountPrimes(position, Player1);
             
@@ -913,6 +1063,22 @@ namespace Backgammon.Models
             {
                 return PositionType.FivePrime;
             }
+
+            // Bearoff with contact
+            if (IsBearOffAllowed(position, Player1) || IsBearOffAllowed(position, Player2))
+            {
+                return PositionType.BearoffContact;
+            }
+
+            if (IsCompletedStage(position)) {
+                //Console.WriteLine("Completed stage");
+                //var board = new BackgammonBoard();
+                //board.Position = position;
+                //Console.WriteLine(board);
+                return PositionType.CompletedStage;
+            }
+
+            
 
             return PositionType.Contact;
         }

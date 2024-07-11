@@ -1,4 +1,5 @@
-﻿using Backgammon.Models;
+﻿using Backgammon.GamePlay;
+using Backgammon.Models;
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util;
 using Backgammon.Util.AI;
@@ -12,7 +13,7 @@ namespace Backgammon.Training
     {
         private readonly ILogger _trainLogger; // Custom logger for game simulation
         private readonly MinMaxUtility _minMaxUtility; // Custom logger for game simulation
-        
+
         public GameDataTrainer(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators, string logFilePath)
         {
             //_neuralNetworks = neuralNetworks;
@@ -36,14 +37,18 @@ namespace Backgammon.Training
                 .CreateLogger();
         }
 
-        public void inspectTrainingData(TrainingData trainingData, int player)
+        public void inspectTrainingData(TrainingData trainingData, int player, PositionType positionType)
         {
             BackgammonBoard backgammonBoard = new BackgammonBoard();
             backgammonBoard.Position = trainingData.board;
-            Console.WriteLine($"Train board \n {backgammonBoard}");
-            Console.WriteLine($"player \n {player}");
-            Console.WriteLine($"Target: {string.Join(", ", trainingData.Target)} ");
-            Console.WriteLine($"Inputs: {string.Join(", ", trainingData.InputData)} ");
+            if (BackgammonBoard.IsAnyBackgame(trainingData.board))
+            {
+                Console.WriteLine($"Train board \n {backgammonBoard}");
+                Console.WriteLine($"PositionType \n {positionType}");
+                Console.WriteLine($"player \n {player}");
+                Console.WriteLine($"Target: {string.Join(", ", trainingData.Target)} ");
+                Console.WriteLine($"Inputs: {string.Join(", ", trainingData.InputData)} ");
+            }
         }
 
         public List<TrainingData> GameToTrainingDataMinMax(GameData gameData, float learningRate)
@@ -53,6 +58,8 @@ namespace Backgammon.Training
             var backgammonBoard = new BackgammonBoard();
             var initalLearningRate = learningRate;
             PositionType? previousPositionType = null;
+            var finalScoreVector = gameData.MoveData.Last().ScoreVector;
+            //var finalScoreVector = finalPosition.ScoreVector;
             foreach (var elem in moveDataListReversed)
             {
                 var trainingBoard = elem.BoardBefore;
@@ -70,12 +77,18 @@ namespace Backgammon.Training
                 _trainLogger.Information("\n" + backgammonBoard);
 
                 var ply = 1;
-                (float equity, float[] scoreVector) = _minMaxUtility.EvaluatePositionAverage(trainingBoard, playerAtTurn, ply);
-
+                (_, float[] scoreVector) = _minMaxUtility.EvaluatePositionAverage(trainingBoard, playerAtTurn, ply);
+                
+                //It should work fine withouth combining finalVector but I think can be useful in early training
+                var scoreVectorWeight = 1.0f;
+                var scoreVectorCombined = CombineVectors(scoreVector, finalScoreVector, scoreVectorWeight);
                 _trainLogger.Information(" ScoreVec MinMax" + string.Join(", ", scoreVector));
+                _trainLogger.Information("Final ScoreVec MinMax" + string.Join(", ", finalScoreVector));
+                _trainLogger.Information(" ScoreVecCombined" + string.Join(", ", scoreVectorCombined));
+                scoreVector = scoreVectorCombined;
                 //var modelIndex = BoardToNeuralInputsEncoder.MapBoardToModel(trainingBoard);
                 var positionType = BackgammonBoard.MapBoardToPositionType(trainingBoard);
-                
+
                 var (inputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(trainingBoard, positionType, playerAtTurn);
 
                 if (MirrorBoardForPlayer2 && elem.Player == BackgammonBoard.Player2)
@@ -87,7 +100,7 @@ namespace Backgammon.Training
                         board = trainingBoard
                     };
                     trainingDatas.Add(trainingData);
-                    //inspectTrainingData(trainingData, playerAtTurn);
+                    //inspectTrainingData(trainingData, playerAtTurn, positionType);
                 }
                 else
                 {
@@ -103,8 +116,8 @@ namespace Backgammon.Training
                     learningRate = initalLearningRate;
                 }
                 else
-                {                    
-                    learningRate *= 0.8f;
+                {
+                    learningRate *= 0.99f;
                 }
                 previousPositionType = positionType;
             }
