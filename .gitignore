@@ -45,7 +45,7 @@ $RECYCLE.BIN/
 .vs/
 
 # Exclude the data folder
-data/
+data*/
 
 # Add other common exclusions as needed
 *.log

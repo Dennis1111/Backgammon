@@ -1,10 +1,5 @@
 ﻿using Backgammon.Models.NeuralNetwork.ActivationFunctions;
 using Backgammon.Models.NeuralNetwork;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Backgammon.Util.AI
 {
@@ -17,14 +12,14 @@ namespace Backgammon.Util.AI
             var input = new float[] { 0f, 0f };
             var target = new float[] { 0f };
             XoR.Add((input, target));
-            input = new float[] { 1f, 1f };
-            target = new float[] { 0f };
+            input = [1f, 1f];
+            target = [0f];
             XoR.Add((input, target));
-            input = new float[] { 0f, 1f };
-            target = new float[] { 1f };
+            input = [0f, 1f];
+            target = [1f];
             XoR.Add((input, target));
-            input = new float[] { 1f, 0f };
-            target = new float[] { 1f };
+            input = [1f, 0f];
+            target = [1f];
             XoR.Add((input, target));
 
             return XoR;
@@ -37,7 +32,6 @@ namespace Backgammon.Util.AI
             // Add layers
             model.AddFirstLayer(inputSize, 4, new LeakyReluActivationFunction());
             model.AddLayer(16, new LeakyReluActivationFunction());
-            //model.AddLayer(32, new LeakyReluActivationFunction());
             model.AddLayer(1, new SigmoidActivationFunction()); // Assuming 6 outputs for the scores
             return model;
         }

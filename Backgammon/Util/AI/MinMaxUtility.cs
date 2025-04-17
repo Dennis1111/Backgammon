@@ -1,7 +1,7 @@
 ﻿using Backgammon.Models;
 using Backgammon.Utils;
 using static Backgammon.Util.Constants;
-
+using static Backgammon.Models.BackgammonBoard;
 namespace Backgammon.Util.AI
 {
     internal class MinMaxUtility
@@ -11,16 +11,14 @@ namespace Backgammon.Util.AI
         private float _clampMin = 0f;
         private float _clampMax = 1f;
         private readonly Dictionary<string, float[]> _bearOffDatabase;
-        private bool _isCreatingBearoffDatabase=false;
+        private bool _isCreatingBearOffDatabase=false;
         private Dictionary<PositionType, IBackgammonPositionEvaluator> _positionEvaluators;
-        // private bool _useClampTargets=true;
-
         
         public MinMaxUtility(Dictionary<string, float[]> bearOffDatabase)
         {
             _bearOffDatabase = bearOffDatabase;
             _positionEvaluators = [];
-            _isCreatingBearoffDatabase = true;
+            _isCreatingBearOffDatabase = true;
         }
         public MinMaxUtility(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators)
         {
@@ -31,11 +29,10 @@ namespace Backgammon.Util.AI
         public void useClampValues(float min, float max) {
             _clampMin = min;
             _clampMax = max;
-            //_useClampTargets = true;
         }
 
         public void createBearOffDatabase() { 
-            _isCreatingBearoffDatabase = true;
+            _isCreatingBearOffDatabase = true;
         }
 
         public int LeafCounter => _leafCounter;
@@ -58,21 +55,33 @@ namespace Backgammon.Util.AI
         /// <param name="plyDepth"></param>
         /// <param name="neuralNetwork"></param>
         /// <returns>An ordered list of moves with best move first based on the moves equity</returns>
-        internal List<MoveData> EvaluateMoveCandidates(int[] board, int currentPlayer, int die1, int die2, int plyDepth)
+        internal List<MoveData> EvaluateMoveCandidates(int[] board, int currentPlayer, int die1, int die2, int plyDepth, List<MoveData> moveCandidates=null)
         {
             ResetLeafCounter();
             List<MoveData> moveDatas = [];
-            var movesAndBoards = BackgammonBoard.GenerateLegalMovesStatic(board, die1, die2, currentPlayer);
-            foreach (var moveAndBoard in movesAndBoards)
+            if (moveCandidates is null)
             {
-                var newBoard = moveAndBoard.board;
-                var move = moveAndBoard.move;
-                // shall we decrease ply here ?
-                var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
-                var moveData = new MoveData(currentPlayer, board, newBoard, move, equity, scoreVector);
-                moveDatas.Add(moveData);
+
+                var movesAndBoards = GenerateLegalMovesStatic(board, die1, die2, currentPlayer);
+                foreach (var moveAndBoard in movesAndBoards)
+                {
+                    var newBoard = moveAndBoard.board;
+                    var move = moveAndBoard.move;
+                    // shall we decrease ply here ?
+                    var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth - 1);
+                    var moveData = new MoveData(currentPlayer, board, newBoard, move, equity, scoreVector);
+                    moveDatas.Add(moveData);
+                }
             }
-            if (currentPlayer == BackgammonBoard.Player1)
+            else {
+                foreach (var moveCandidate in moveCandidates) {
+                    var newBoard = moveCandidate.BoardAfter;
+                    var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth - 1);
+                    var moveData = new MoveData(currentPlayer, board, newBoard, moveCandidate.Move, equity, scoreVector);
+                    moveDatas.Add(moveData);
+                }
+            }
+            if (currentPlayer == Player1)
             {
                 // Sort descending for PLAYER_1 to maximize equity
                 moveDatas.Sort((x, y) => y.Equity.CompareTo(x.Equity));
@@ -99,9 +108,9 @@ namespace Backgammon.Util.AI
         internal (float, float[]) MinMax(int[] board, int currentPlayer, int die1, int die2, int plyDepth)
         {
             //Console.WriteLine("Minmax board" + String.Join(",", board));
-            var gameEnded = BackgammonBoard.GameEndedStatic(board);
+            var gameEnded = GameEndedStatic(board);
             var isBearOffLeave = BearOffUtility.IsBearOffPosition(board);
-            if (isBearOffLeave && _isCreatingBearoffDatabase) {
+            if (isBearOffLeave && _isCreatingBearOffDatabase) {
                 if (!BearOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase)) {
                     isBearOffLeave = false;
                 }
@@ -112,35 +121,95 @@ namespace Backgammon.Util.AI
                 _leafCounter++;
                 var scoreVector = ScoreUtility.EvaluatePosition(board, currentPlayer, _positionEvaluators, gameEnded);
                 var equity = ScoreUtility.CalculateEquity(scoreVector);
-                //Console.WriteLine("Minmax leafboard" + String.Join(",", board));
-                //Console.WriteLine("Minmax score" + String.Join(",", scoreVector));
                 return (equity, scoreVector);
             }
-            var bestEquity = currentPlayer == BackgammonBoard.Player1 ? float.NegativeInfinity : float.PositiveInfinity;
+            var bestEquity = currentPlayer == Player1 ? float.NegativeInfinity : float.PositiveInfinity;
             var bestScoreVector = new float[6];
 
-            var movesAndBoards = BackgammonBoard.GenerateLegalMovesStatic(board, die1, die2, currentPlayer);
+            List<(Move move , int[] board)> movesAndBoards = GenerateLegalMovesStatic(board, die1, die2, currentPlayer);
             if (movesAndBoards.Count == 0)
             {
                 // Since the player can't move the evaluation of this position is the average for this position with the opponent as currentPlayer
-                return EvaluatePositionAverage(board, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
+                return EvaluatePositionAverage(board, BackgammonGameHelper.Opponent(currentPlayer), plyDepth - 1);
             }
             else
             {
+                Dictionary<int[], float> heuristicEvaluations = [];
+                // Create a list of tuples to store move, board, equity, and win percentages
+                List<(Move move, int[] board, float equity, float[] winPercentages)> evaluatedMoves = new List<(Move, int[], float, float[])>();
+
+                // Perform a 0-ply heuristic search first
                 foreach (var moveAndBoard in movesAndBoards)
                 {
-                    var newBoard = moveAndBoard.board;
-                    var move = moveAndBoard.move;
-                    // shall we decrease ply here ?
+                    var heuristicPosition = moveAndBoard.board;
+                    var heuristicEvaluation = EvaluatePositionAverage(heuristicPosition, BackgammonGameHelper.Opponent(currentPlayer), 0);
+                    evaluatedMoves.Add((moveAndBoard.move, heuristicPosition, heuristicEvaluation.averageEquity, heuristicEvaluation.averageScores));
+                }
+
+                // Sort the list by equity
+                if (currentPlayer == Player1)
+                {
+                    evaluatedMoves.Sort((a, b) => b.equity.CompareTo(a.equity)); // Maximize for Player1
+                }
+                else
+                {
+                    evaluatedMoves.Sort((a, b) => a.equity.CompareTo(b.equity)); // Minimize for Player2
+                }
+                var bestHeuristicMove = evaluatedMoves.First();
+                if (plyDepth == 1) {
+                    return (bestHeuristicMove.equity, bestHeuristicMove.winPercentages);
+                }
+                float bestHeuristicValue = bestHeuristicMove.equity;
+                                
+                // Set an absolute threshold to prune suboptimal moves
+                float thresholdMargin = 0.2f;
+                // Set a threshold to prune suboptimal moves (for example, 20% worse)
+                float threshold = currentPlayer == Player1 ? bestHeuristicValue - thresholdMargin: bestHeuristicValue + thresholdMargin;
+                
+                /*var backgammonBoard = new BackgammonBoard();
+                backgammonBoard.Position = board;
+                backgammonBoard.Die1 = die1;
+                backgammonBoard.Die2 = die2;
+                backgammonBoard.CurrentPlayer = currentPlayer;
+                Console.WriteLine("\n\nStarting pos\n" + backgammonBoard);
+                Console.WriteLine("\nNumber of candidates" + movesAndBoards.Count);*/
+                int skippedPositions = 0;
+                int positionCount = 0;
+                int maxPositions = 2;
+                foreach (var evaluatedMove in evaluatedMoves.Take(maxPositions))
+                {
+                    positionCount++;
+                    //Console.WriteLine("position" + positionCount);
+                    var newBoard = evaluatedMove.board;
+                    // This part should never be true and probably be removed in my new version
+                    if ((currentPlayer == Player1 && evaluatedMove.equity < threshold) ||
+                        (currentPlayer == Player2 && evaluatedMove.equity > threshold))
+                    {
+                        //backgammonBoard.Position = newBoard;
+                        //Console.WriteLine("Bad Move\n" + evaluatedMove.move.MovesAsStandardNotation());
+                        //Console.WriteLine("skipping bad position\n" + backgammonBoard);
+                        //Skip this move as it's much worse than the best found heuristic value
+                        skippedPositions++;
+                        continue;
+                    }
+
+                    var move = evaluatedMove.move;
                     var (equity, scoreVector) = EvaluatePositionAverage(newBoard, BackgammonGameHelper.Opponent(currentPlayer), plyDepth -1);
-                    if ((currentPlayer == BackgammonBoard.Player1 && equity > bestEquity) ||
-                        (currentPlayer == BackgammonBoard.Player2 && equity < bestEquity))
+                    if ((currentPlayer == Player1 && equity > bestEquity) ||
+                        (currentPlayer == Player2 && equity < bestEquity))
                     {
                         bestEquity = equity;
                         bestScoreVector = scoreVector;
-                        //bestMoveAndBoard = moveAndBoard;
-                    }
+                        //backgammonBoard.Position = evaluatedMove.board;
+                        //Console.WriteLine("New Best Move\n" + evaluatedMove.move.MovesAsStandardNotation());
+                        //Console.WriteLine("New Best position\n" + backgammonBoard);
+                    }/*
+                    else {
+                        Console.WriteLine("Close but not new best Move\n" + evaluatedMove.move.MovesAsStandardNotation());
+                        Console.WriteLine("New Best position\n" + backgammonBoard);
+                    }*/
                 }
+                //Console.WriteLine("Skipped positions" + skippedPositions+ "posCount" + positionCount);
             }
             return (bestEquity, bestScoreVector);
         }
@@ -158,9 +227,9 @@ namespace Backgammon.Util.AI
         internal (float averageEquity, float[] averageScores) EvaluatePositionAverage(int[] board, int currentPlayer, int plyDepth)
         {
             //Console.WriteLine("Minmax av board" + String.Join(",", board));
-            var gameEnded = BackgammonBoard.GameEndedStatic(board);
+            var gameEnded = GameEndedStatic(board);
             var isBearOffLeave = BearOffUtility.IsBearOffPosition(board);
-            if (isBearOffLeave && _isCreatingBearoffDatabase)
+            if (isBearOffLeave && _isCreatingBearOffDatabase)
             {
                 if (!BearOffUtility.PosExistsInDatabase(board, currentPlayer, _bearOffDatabase))
                 {

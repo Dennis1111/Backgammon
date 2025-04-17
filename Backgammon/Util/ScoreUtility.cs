@@ -1,8 +1,8 @@
 ﻿using Backgammon.Models;
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util.AI;
-using Backgammon.Util;
 using static Backgammon.Util.Constants;
+using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.Utils
 {
@@ -19,7 +19,7 @@ namespace Backgammon.Utils
                 return gameEndedEval;
             }
             
-            var positionType = BackgammonBoard.MapBoardToPositionType(position);
+            var positionType = BackgammonBoard.MapBoardToPositionType(position, player);
             var evaluation = _positionEvaluators[positionType].Evaluate(position, player);
             
             return evaluation;

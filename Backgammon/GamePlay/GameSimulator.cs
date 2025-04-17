@@ -1,10 +1,13 @@
 ﻿using Backgammon.Models;
+using Backgammon.Training;
 using Backgammon.Util;
 using Backgammon.Util.AI;
 using Backgammon.Utils;
 using Serilog;
 using System.Diagnostics;
 using static Backgammon.Util.Constants;
+using static Backgammon.Models.BackgammonBoard;
+using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.GamePlay
 {
@@ -27,8 +30,6 @@ namespace Backgammon.GamePlay
             _board = new BackgammonBoard();
             _minMaxUtility = new MinMaxUtility(positionEvaluators);
             _logdir = logFileDirectory;
-            // Make sure to flush and close the logger
-            // Log.CloseAndFlush();
         }
 
         private ILogger CreateLogger(string logFilePath)
@@ -42,19 +43,10 @@ namespace Backgammon.GamePlay
         static void ClearOldLogFiles(string logDirectory, string logFilePrefix, int retentionDays)
         {
             var now = DateTime.UtcNow;
-            //foreach (var filePath in Directory.GetFiles(logDirectory, $"{logFilePrefix}-*.txt"))
             foreach (var filePath in Directory.GetFiles(logDirectory, $"*.log"))
             {
                 var fileName = Path.GetFileNameWithoutExtension(filePath);
                 File.Delete(filePath);
-                /*var datePart = fileName.Substring(logFilePrefix.Length + 1); // Adjust based on your actual prefix
-                if (DateTime.TryParseExact(datePart, "yyyyMMdd", null, DateTimeStyles.None, out var fileDate))
-                {
-                    if ((now - fileDate).TotalDays > retentionDays)
-                    {
-                        File.Delete(filePath);
-                    }
-                }*/
             }
         }
 
@@ -95,13 +87,13 @@ namespace Backgammon.GamePlay
             string rowNotation = "";
 
             for (int i = 0; i < gameData.MoveData.Count; i++)
-            {                
+            {
                 if (newRow)
                 {
                     rowNotation = rowCount < 10 ? $"  {rowCount}) " : $" {rowCount}) ";
                 }
                 var move = gameData.MoveData[i];
-                Console.WriteLine(i + " : "+ move.Move.MovesAsStandardNotation());
+                Console.WriteLine(i + " : " + move.Move.MovesAsStandardNotation());
                 if (move.Player == BackgammonBoard.Player2)
                     rowNotation = rowNotation.PadRight(39);
                 rowNotation += move.Move.MovesAsStandardNotation();
@@ -114,7 +106,7 @@ namespace Backgammon.GamePlay
                 }
                 else
                 {
-                    
+
                     newRow = false;
                 }
 
@@ -124,22 +116,23 @@ namespace Backgammon.GamePlay
                     var winningPosition = move.BoardAfter;
                     var score = Math.Abs(BackgammonBoard.Score(winningPosition, 1));
                     rowNotation = rowCount < 10 ? $"  {rowCount})" : $" {rowCount})";
-                    Console.WriteLine(rowNotation+ ": score"+ score);
+                    Console.WriteLine(rowNotation + ": score" + score);
 
                     if (move.Player == BackgammonBoard.Player2)
                     {
                         rowNotation = rowNotation.PadRight(39);
                     }
-                    
+
                     Console.WriteLine(rowNotation + ": score" + score);
                     rowNotation += $"  Wins {score} point";
                     gameNotations.Add(rowNotation);
                 }
             }
-            
+
             using (StreamWriter writer = new StreamWriter(_logdir + "/moneygame.txt"))
             {
-                foreach (var row in gameNotations) { 
+                foreach (var row in gameNotations)
+                {
                     writer.WriteLine(row);
                 }
             }
@@ -164,12 +157,12 @@ namespace Backgammon.GamePlay
                 die2 = random.Next(6) + 1;
             }
 
-            var currentPlayer = player ?? (random.Next(2) == 0 ? BackgammonBoard.Player1 : BackgammonBoard.Player2);
+            var currentPlayer = player ?? (random.Next(2) == 0 ? Player1 : Player2);
 
             //bool showTheGame = true;
             bool isStartingPosition = true;
 
-            while (!BackgammonBoard.GameEndedStatic(currentPosition))
+            while (!GameEndedStatic(currentPosition))
             {
                 backgammonBoard.Position = currentPosition;
                 if (!isStartingPosition)
@@ -180,9 +173,10 @@ namespace Backgammon.GamePlay
                 backgammonBoard.Die1 = die1;
                 backgammonBoard.Die2 = die2;
                 backgammonBoard.CurrentPlayer = currentPlayer;
-                Console.WriteLine("die1:" + die1 + " die2:" + die2+" moves"+gameData.MoveData.Count);
-                
-                var legalMoves = BackgammonBoard.GenerateLegalMovesStatic(currentPosition, die1, die2, currentPlayer);
+                Console.WriteLine(backgammonBoard);
+                Console.WriteLine("dies: " + die1 + " , " + die2 + " moveCount: " + gameData.MoveData.Count);
+                Console.WriteLine("positionType: " + MapBoardToPositionType(currentPosition, currentPlayer));
+                var legalMoves = GenerateLegalMovesStatic(currentPosition, die1, die2, currentPlayer);
                 var opponent = BackgammonGameHelper.Opponent(currentPlayer);
                 if (legalMoves.Count > 0)
                 {
@@ -191,16 +185,21 @@ namespace Backgammon.GamePlay
                     var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly);
                     var ply1Millis = stopwatchMinMax.ElapsedMilliseconds;
                     var leafsPly1 = _minMaxUtility.LeafCounter;
-                    var prevLeafCount = 0;
                     Console.WriteLine($"leafs at ply ({minMaxPly}): " + _minMaxUtility.LeafCounter);
-                    var maxLeaves = 200;
+                    var firstNElements = evaluationsMinMax.Take(3).ToList();
+                    evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly + 1, firstNElements);
+                    Console.WriteLine($"leafs at ply ({minMaxPly + 1}): " + _minMaxUtility.LeafCounter);
+                    Console.WriteLine($"Best Move " + evaluationsMinMax.First().Move.MovesAsStandardNotation());
+                    var prevLeafCount = 0;
+                    /*var maxLeaves = 20000;
                     while (_minMaxUtility.LeafCounter < maxLeaves && _minMaxUtility.LeafCounter > 1 && _minMaxUtility.LeafCounter > prevLeafCount)
                     {
+                        var firstNElements = evaluationsMinMax.Take(3).ToList();
                         prevLeafCount = _minMaxUtility.LeafCounter;
                         minMaxPly++;
-                        evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly);
-                        Console.WriteLine($"leafs at ply ({minMaxPly}): " + _minMaxUtility.LeafCounter);           
-                    }
+                        evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly, firstNElements);
+                        Console.WriteLine($"leafs at ply ({minMaxPly}): " + _minMaxUtility.LeafCounter);
+                    }*/
 
                     var ply2Millis = stopwatchMinMax.ElapsedMilliseconds - ply1Millis;
                     stopwatchMinMax.Stop();
@@ -220,7 +219,6 @@ namespace Backgammon.GamePlay
                         //_gameLogger.Information("min max eval time: " + seconds);
                         //_gameLogger.Information("Leaves:" + _minMaxUtility.LeafCounter);
                         //_gameLogger.Information("average leaf time ms : " + (1000 * seconds / _minMaxUtility.LeafCounter));
-
                     }
 
                     var bestMove = evaluationsMinMax[0];
@@ -251,6 +249,154 @@ namespace Backgammon.GamePlay
             return gameData;
         }
 
+        public void playAndTrain(int games, int trainFrequency, int epochs, int saveFrequency)
+        {
+            var gameDataTrainLogs = Path.Combine(_logdir, "trainData.log");
+            var gameDataTrainer = new GameDataTrainer(_positionEvaluators, gameDataTrainLogs);
+
+            var totalPlayingTime = 0L;
+            var totalTrainingTime = 0L;
+
+            var nrOfTrainingGames = 3000;
+
+            var maxExtraGames = 1000; // When extraTrainPositions exceeds this we dont add any more
+            var inspectLearningFrequency = 10;
+            var batchLearningRate = 0.01f;
+            var minGamesBeforeBatchLearning = 800;
+            var trainingGamesData = new List<TrainingData>[nrOfTrainingGames];
+            List<(int[], int)> extraTrainPositions = [];
+            int saveCounter = 0;
+            int maxExtraSubPositions = 300; // How many extra max subpositions from one game (, can be recursive)
+            int maxExtraMoveCandidates = 3;// How many extra max subpositions from one position (, can be recursive)
+            int maxMovesToPlay = 80; // How many moves to play in a subposition
+            int subPositions = 0;
+            // Sometimes we play a moneygame and save it for evaluation in XG
+            int moneyGameFrequency = 200;
+            var rand = new Random();
+            for (int i = 0; i < games; i++)
+            {
+                Stopwatch stopwatchPlay = Stopwatch.StartNew();
+                GameData? gameData = null;
+                bool gameDataIsExtraGame = false;
+                if (extraTrainPositions.Any())
+                {
+                    var lastItem = extraTrainPositions[extraTrainPositions.Count - 1]; // Pick the last item    
+                    extraTrainPositions.RemoveAt(extraTrainPositions.Count - 1); // Remove the last item
+                    Console.WriteLine("Simulate an extra game" + i);
+                    gameData = SimulateSingleGame(lastItem.Item1, lastItem.Item2, maxMovesToPlay);
+                    gameDataIsExtraGame = true;
+                }
+                if (gameData is null || gameData.IsEmpty())
+                {
+                    Console.WriteLine("Simualate a game" + i);
+                    gameData = SimulateSingleGame();
+                    if (gameData.IsEmpty())
+                        Console.WriteLine("Empty GameData" + i);
+                    subPositions = 0;
+                }
+                stopwatchPlay.Stop();
+                totalPlayingTime += stopwatchPlay.ElapsedMilliseconds;
+
+                Stopwatch stopwatchTrain = Stopwatch.StartNew();
+                //For batchlearning we want to create a dataset before starting training
+                if (i % trainFrequency == 0 && i > minGamesBeforeBatchLearning)
+                {
+                    for (int j = 0; j < 5; j++)
+                    {
+                        var trainData = gameDataTrainer.GameToTrainingDataMinMax(gameData, batchLearningRate);
+
+                        trainingGamesData[i % nrOfTrainingGames] = trainData;
+                        var flatList = trainingGamesData
+                            .Where(list => list != null)  // Exclude null lists
+                            .SelectMany(list => list)     // Flatten the lists
+                            .ToList();
+                        Console.WriteLine("Train on patterns:" + flatList.Count);
+
+                        Dictionary<PositionType, List<TrainingData>> trainingPatternsDict = [];
+                        // We should maybe update the this list each epoch so we get new target values
+                        foreach (var elem in flatList)
+                        {
+                            //var positionType = MapBoardToPositionType(elem.board);
+                            var positionType = elem.PositionType;
+                            if (positionType != PositionType.BearOffDatabase)
+                            {
+                                if (!trainingPatternsDict.ContainsKey(positionType))
+                                {
+                                    trainingPatternsDict.Add(positionType, new List<TrainingData>());
+                                }
+                                trainingPatternsDict[positionType].Add(elem);
+                            }
+                        }
+
+                        foreach (var positionType in trainingPatternsDict.Keys)
+                        {
+                            var trainingPatterns = trainingPatternsDict[positionType];
+                            var neuralNetwork = ((NeuralNetworkPositionEvaluator)_positionEvaluators[positionType]).NeuralNetwork;
+                            Console.WriteLine("Train" + positionType + " patterns" + trainingPatterns.Count + ": " + neuralNetwork.DetfaultfilePath);
+                            var sample = trainingPatterns[0];
+                            Console.WriteLine("sample" + string.Join(", ", sample.board));
+                            Console.WriteLine("sample input" + sample.InputData.Length);
+                            neuralNetwork.BatchUpdate(trainingPatterns, epochs);
+                        }
+                    }
+                }
+                stopwatchTrain.Stop();
+                totalTrainingTime += stopwatchTrain.ElapsedMilliseconds;
+                if (i % inspectLearningFrequency == 0)
+                {
+                    Console.WriteLine($"Game nr: {i} positions {gameData.MoveData.Count}");
+                    Console.WriteLine($"Playing time: {totalPlayingTime / 1000L} s");
+                    Console.WriteLine($"Training time: {totalTrainingTime / 1000L} s");
+                    foreach (var (key, value) in _positionEvaluators)
+                    {
+                        if (value is NeuralNetworkPositionEvaluator neuralNetworkEvaluator)
+                        {
+                            try
+                            {
+                                Console.WriteLine(key + "NN" + neuralNetworkEvaluator.NeuralNetwork.Description);
+                                var (_, labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BarPointMutualHoldingGame, key);
+                                neuralNetworkEvaluator.NeuralNetwork.SetInputLabels(labels);
+                                neuralNetworkEvaluator.NeuralNetwork.checkMaxFeatureRelevance();
+                            }
+                            catch (Exception ex) { Console.WriteLine(ex.Message); }
+                        }
+                    }
+                }
+
+                // Most extra games we add from the 'main' game rather an extra game from anothe extra game
+                var addExtraGameProbability = gameDataIsExtraGame ? 0.01 : 0.2;
+                if (subPositions < maxExtraGames && rand.NextDouble() < addExtraGameProbability)
+                {
+                    var generatedSubPositions = generateExtraData(gameData, maxExtraSubPositions, maxExtraMoveCandidates);
+                    if (generatedSubPositions.Count > 0)
+                    {
+                        subPositions += generatedSubPositions.Count();
+                        extraTrainPositions.AddRange(generatedSubPositions);
+                        Console.WriteLine("\nCreated extra train positions" + extraTrainPositions.Count);
+                    }
+                }
+
+                if ((i + 1) % saveFrequency == 0)
+                {
+                    saveCounter++;
+                    foreach (var (key, value) in _positionEvaluators)
+                    {
+                        if (value is NeuralNetworkPositionEvaluator neuralNetworkEvaluator)
+                        {
+                            neuralNetworkEvaluator.NeuralNetwork.Save();
+                            neuralNetworkEvaluator.NeuralNetwork.Save(saveCounter);
+                        }
+                    }
+                }
+
+                if ((i + 1) % moneyGameFrequency == 0)
+                {
+                    var moneyGame = PlayMoneygame();
+                    exportGameToFile(moneyGame);
+                }
+            }
+        }
+
         public GameData SimulateSingleGame(int[]? startingPosition = null, int? player = null, int maxMoves = 200)
         {
             var startingPositions = BackgammonPositions.BearOffGames;
@@ -260,6 +406,8 @@ namespace Backgammon.GamePlay
             startingPositions = BackgammonPositions.MergeArrays(startingPositions, BackgammonPositions.BackGames);
             startingPositions = BackgammonPositions.MergeArrays(startingPositions, BackgammonPositions.FishingGames);
             startingPositions = BackgammonPositions.MergeArrays(startingPositions, BackgammonPositions.BearOffGamesNoContact);
+            startingPositions = BackgammonPositions.MergeArrays(startingPositions, BackgammonPositions.PrimeVsPrimeGames);
+            startingPositions = BackgammonPositions.MergeArrays(startingPositions, BackgammonPositions.SplitGames);
             var random = new Random();
             var startingPositionIndex = random.Next(startingPositions.Length);
             //int[] currentPosition = BackgammonPositions.BearoffVs1Point; //startingPosition ?? startingPositions[random.Next(startingPositions.Length)];
@@ -272,16 +420,16 @@ namespace Backgammon.GamePlay
 
             if (random.Next(2) > 0)
             {
-                currentPosition = BackgammonBoard.MirrorBoard(currentPosition);
+                currentPosition = MirrorBoard(currentPosition);
             }
             var backgammonBoard = new BackgammonBoard();
             backgammonBoard.Position = currentPosition;
 
             // Deciding the current player. If 'player' is null, choose randomly.
-            int currentPlayer = player ?? (random.NextDouble() > 0.8 ? BackgammonBoard.Player1 : BackgammonBoard.Player2);
-            Console.WriteLine("Staring Position:\n" + backgammonBoard + "bearoff" + BearOffUtility.IsBearOffPosition(currentPosition));
+            int currentPlayer = player ?? (random.NextDouble() > 0.8 ? Player1 : Player2);
+            Console.WriteLine("Staring Position:\n" + backgammonBoard + "bear off" + BearOffUtility.IsBearOffPosition(currentPosition));
             bool showTheGame = true;
-            while (!BackgammonBoard.GameEndedStatic(currentPosition) && !BearOffUtility.IsBearOffPosition(currentPosition) && gameData.MoveData.Count < maxMoves)
+            while (!GameEndedStatic(currentPosition) && !BearOffUtility.IsBearOffPosition(currentPosition) && gameData.MoveData.Count < maxMoves)
             {
                 var die1 = random.Next(6) + 1;
                 var die2 = random.Next(6) + 1;
@@ -289,27 +437,26 @@ namespace Backgammon.GamePlay
                 backgammonBoard.Die1 = die1;
                 backgammonBoard.Die2 = die2;
                 backgammonBoard.CurrentPlayer = currentPlayer;
-                if (gameData.MoveData.Count > 50)
+                if (gameData.MoveData.Count > 3)
                     showTheGame = false;
 
+                var positionType = MapBoardToPositionType(backgammonBoard.Position, currentPlayer);
                 if (showTheGame)
                 {
-                    var positionType = BackgammonBoard.MapBoardToPositionType(backgammonBoard.Position);
-
                     Console.WriteLine("Pos:\n" + backgammonBoard);
                     Console.WriteLine("PositionType" + positionType);
                     Console.WriteLine("Pos:\n" + string.Join(", ", backgammonBoard.Position));
-                    //var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.Position, currentPlayer, die1, die2, 1);
-                    //Console.WriteLine("Scorev MinMax:\n" + string.Join(", ", scorev));
+                    // var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.Position, currentPlayer, die1, die2, 1);
+                    // Console.WriteLine("Scorev MinMax:\n" + string.Join(", ", scorev));
                     var score1 = ScoreUtility.EvaluatePosition(backgammonBoard.Position, currentPlayer, _positionEvaluators);
                     var scoresRounded = score1.Select(t => Math.Round(t, 4).ToString());
                     Console.WriteLine("ScoreV1 EvalPos: \n" + string.Join(", ", scoresRounded));
-                    var mirroredPos = BackgammonBoard.MirrorBoard(backgammonBoard.Position);
+                    var mirroredPos = MirrorBoard(backgammonBoard.Position);
                     // var score2 = ScoreUtility.EvaluatePosition(mirroredPos, BackgammonGameHelper.Opponent(currentPlayer), _positionEvaluators);
                     // Console.WriteLine("ScoreV2 Eval Mirrored: \n" + string.Join(", ", score2));
                 }
 
-                var legalMoves = BackgammonBoard.GenerateLegalMovesStatic(currentPosition, die1, die2, currentPlayer);
+                var legalMoves = GenerateLegalMovesStatic(currentPosition, die1, die2, currentPlayer);
                 //List<MoveData> evaluatedMoves = [];
                 var opponent = BackgammonGameHelper.Opponent(currentPlayer);
                 if (legalMoves.Count > 0)
@@ -319,11 +466,11 @@ namespace Backgammon.GamePlay
                     var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly);
                     var ply1Millis = stopwatchMinMax.ElapsedMilliseconds;
                     var leafsPly1 = _minMaxUtility.LeafCounter;
+                    var firstNElements = evaluationsMinMax.Take(3).ToList();
 
-
-                    if (_minMaxUtility.LeafCounter < 20000)
+                    if (_minMaxUtility.LeafCounter < 2000)//
                     {
-                        evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly + 1);
+                        evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly + 1, firstNElements);
                     }
 
                     var ply2Millis = stopwatchMinMax.ElapsedMilliseconds - ply1Millis;
@@ -333,7 +480,7 @@ namespace Backgammon.GamePlay
 
                     if (logTheGame)
                     {
-                        _gameLogger.Information("Board");
+                        _gameLogger.Information("Board: " + positionType);
                         _gameLogger.Information("\n" + backgammonBoard);
                         _gameLogger.Information("Pos:\n" + string.Join(", ", backgammonBoard.Position));
 
@@ -461,30 +608,20 @@ namespace Backgammon.GamePlay
                 var boardAfter = moveData.BoardAfter;
                 var player = moveData.Player;
                 var opponent = BackgammonGameHelper.Opponent(player);
-                var primeLengthForPlayedMove = BackgammonBoard.CountPrimes(boardAfter, player);
-                var nrOfSafePoints = BackgammonBoard.CountSafePoints(boardAfter, player);
-                //var primeLengthP1 = BoardToNeuralInputsEncoder.CountPrimes(board, BackgammonBoard.Player1);
-                //var primeLengthP2 = BoardToNeuralInputsEncoder.CountPrimes(board, BackgammonBoard.Player2);
+                var (primeLengthForPlayedMove, _) = CountPrimes(boardAfter, player);
+                var nrOfSafePoints = CountSafePoints(boardAfter, player);
                 var rand = new Random();
                 var remainingPositions = nrOfPositions - moveCount;
                 var backgammonBoard = new BackgammonBoard();
-                var stillContact = BackgammonBoard.StillContact(boardAfter);
+                var (stillContact, _) = StillContact(boardAfter);
                 var hitOpponent = moveData.Move.IsOpponentHit();
                 var directHits = BoardToNeuralInputsEncoder.CountDirectHits(boardAfter, player);
-                // Early training add more no contact pos
-                /*if (!stillContact && rand.Next(10) == 0)
-                {
-                    LogBoardPosition(boardBefore, "endgame pos:");
 
-                    extraData.Add((boardBefore, player));
-                }*/
-
-                //LogBoardPosition(boardAfter, "played move");
                 if (moveData.MoveCandidates is not null && stillContact)
                 {
                     // With some probability we add move from 30 best candidates
                     var nBest = 60;
-                    if (rand.NextDouble() > 0.5f)
+                    if (rand.NextDouble() > 0.7f)
                     {
                         var addCandidateProb = 0.8;
                         _extraGamesLogger.Information("Adding from 30 best candidates :");
@@ -497,56 +634,64 @@ namespace Backgammon.GamePlay
                                 addCandidateProb *= 0.8;
                             }
                         }
-                        break;
+                        break;// Only add 'random candidates' for this moveData
                     }
-                    //When not adding positions randomly try to add 'interesting' candidates                    
+                    // When not adding positions randomly try to add 'interesting' candidates                    
                     var extraPositionsForMoveAdded = 0;
                     for (int candCount = 1; candCount < moveData.MoveCandidates.Count; candCount++)
                     {
                         var moveCand = moveData.MoveCandidates[candCount];
-                        if (candCount > 0 && !BackgammonBoard.GameEndedStatic(moveCand.BoardAfter))
+                        if (candCount > 0 && !GameEndedStatic(moveCand.BoardAfter))
                         {
-                            //LogBoardPosition(moveCand.BoardAfter, "Cand move");
-                            var primeLengthCand = BackgammonBoard.CountPrimes(moveCand.BoardAfter, player);
+                            var (primeLengthCand, _) = CountPrimes(moveCand.BoardAfter, player);
                             var directHitsCand = BoardToNeuralInputsEncoder.CountDirectHits(moveCand.BoardAfter, player);
-                            var nrOfSafePointsCand = BackgammonBoard.CountSafePoints(moveCand.BoardAfter, player);
+                            var nrOfSafePointsCand = CountSafePoints(moveCand.BoardAfter, player);
                             _extraGamesLogger.Information(nrOfSafePoints + "Safe points comp:" + nrOfSafePointsCand);
                             _extraGamesLogger.Information("scorev" + string.Join(", ", moveCand.ScoreVector));
-                            if (directHits > directHitsCand)
+
+                            if (primeLengthCand >= 3 && primeLengthCand > primeLengthForPlayedMove)
                             {
                                 extraData.Add((moveCand.BoardAfter, opponent));
-                                LogBoardPosition(boardBefore, "Move" + moveData.Move);
-                                LogBoardPosition(boardAfter, $"Playd move {nrOfSafePoints}\n ");
-                                backgammonBoard.Position = moveData.BoardBefore;
-                                LogBoardPosition(moveCand.BoardAfter, $"EXTRA POS Fewer direct hits {nrOfSafePoints}\n ");
-                                extraPositionsForMoveAdded++;
-                            }
-                            else if (primeLengthCand >= 3 && primeLengthCand > primeLengthForPlayedMove)
-                            {
-                                extraData.Add((moveCand.BoardAfter, opponent));
-                                LogBoardPosition(boardBefore, "Move" + moveData.Move);
+                                LogBoardPosition(boardBefore, "Move" + moveData.Move.MovesAsStandardNotation());
                                 LogBoardPosition(boardAfter, "Primepos Length Played:" + primeLengthForPlayedMove);
                                 backgammonBoard.Position = moveData.BoardAfter;
                                 LogBoardPosition(moveCand.BoardAfter, "EXTRA POS Primeposition Cand Length:" + primeLengthCand);
                                 extraPositionsForMoveAdded++;
                             }
-                            /*else if (nrOfSafePointsCand > nrOfSafePoints) //This can be good sometimes but not when rolling the prime
+                            else if (IsSplittingOrGoingForBetterAnchor(moveCand.BoardBefore, moveCand.Move))
                             {
                                 extraData.Add((moveCand.BoardAfter, opponent));
-                                LogBoardPosition(boardBefore, "Move" + moveData.Move);
+                                LogBoardPosition(boardBefore, "Move" + moveData.Move.MovesAsStandardNotation());
+                                LogBoardPosition(boardAfter, "Split Cand added:");
+                                extraPositionsForMoveAdded++;
+                            }
+                            else if (nrOfSafePointsCand > nrOfSafePoints) //This can be good sometimes but not when rolling the prime
+                            {
+                                //Any move that 
+                                extraData.Add((moveCand.BoardAfter, opponent));
+                                LogBoardPosition(boardBefore, "Move" + moveData.Move.MovesAsStandardNotation());
                                 LogBoardPosition(boardAfter, $"Safe points played {nrOfSafePoints}\n ");
-                                backgammonBoard.Points = moveData.BoardBefore;
+                                backgammonBoard.Position = moveData.BoardBefore;
                                 LogBoardPosition(moveCand.BoardAfter, $"EXTRA POS Safe points Cand {nrOfSafePoints}\n ");
                                 extraPositionsForMoveAdded++;
                                 //break;
-                            }*/
+                            }
                             else if (moveCand.Move.IsDoubleTiger())
                             {
-                                LogBoardPosition(boardBefore, "Move" + moveData.Move);
+                                LogBoardPosition(boardBefore, "Move" + moveData.Move.MovesAsStandardNotation());
                                 LogBoardPosition(boardAfter, $"EXTRA POS Double tiger!\n ");
                                 extraData.Add((moveCand.BoardAfter, opponent));
                                 extraPositionsForMoveAdded++;
                                 break;
+                            }
+                            else if (directHits > directHitsCand)
+                            {
+                                extraData.Add((moveCand.BoardAfter, opponent));
+                                LogBoardPosition(boardBefore, "Move" + moveData.Move.MovesAsStandardNotation());
+                                LogBoardPosition(boardAfter, $"Playd move {nrOfSafePoints}\n ");
+                                backgammonBoard.Position = moveData.BoardBefore;
+                                LogBoardPosition(moveCand.BoardAfter, $"EXTRA POS Fewer direct hits {nrOfSafePoints}\n ");
+                                extraPositionsForMoveAdded++;
                             }
                             else if (!hitOpponent && moveCand.Move.IsOpponentHit())
                             {
@@ -569,76 +714,42 @@ namespace Backgammon.GamePlay
                         }
                     }
                 }
-                /*if (Math.Max(primeLengthP1, primeLengthP2) > 4)
-                {
-                    var die1 = rand.Next(6) + 1;
-                    var die2 = rand.Next(6) + 1;
-                    var legalMoves = BackgammonBoard.GenerateLegalMovesStatic(board, die1, die2, player);
-                    foreach (var legalMove in legalMoves)
-                    {
-                        var primeLengthMoveCand = BoardToNeuralInputsEncoder.CountPrimes(board, BackgammonBoard.Player2);
-                        if (rand.Next(6) == 0 && !BackgammonBoard.GameEndedStatic(legalMove.board)) //some arbitrarily percentage..
-                        {
-                            Console.WriteLine("Add prime board " + string.Join(", ", legalMove.board));
-                            extraData.Add((legalMove.board, BackgammonGameHelper.Opponent(player)));
-                            //break;
-                        }
-                    }
-                }*/
-                // Sometimes a game 1000 of moves with extreme superbackgames, doesnt make sense to train much there
-                // Could make sense to train more on the first moves though because its probably bad choices that lead to long games
-                //if ((remainingPositions < 5 || moveCount<10) && rand.Next(10) > 0)
-                /*  else //if (moveCount < 4 && rand.Next(10) > 1)
-                  {
-                      // Add the three best moves
-                      int candCount = 0;
-                      if (moveData.MoveCandidates != null)
-                      {
-                          bool addNBestMoves = rand.Next(10) == 0;
-                          int nBestMoves = 3;
-                          foreach (var moveCandidate in moveData.MoveCandidates)
-                          {
-                              if (BackgammonBoard.GameEndedStatic(moveCandidate.BoardAfter))
-                              {
-                                  break;
-                              }
-                              backgammonBoard.Points = moveData.BoardAfter;//For printing only
-                              // With some probability play out three first positions (perhaps should skip bearoff)
-                              if (addNBestMoves)
-                              {
-                                  if (candCount < nBestMoves)
-                                  {
-                                      extraData.Add((moveData.BoardAfter, BackgammonGameHelper.Opponent(moveData.Player)));
-
-                                      Console.WriteLine($"Add bestMoves cand \n{backgammonBoard}");
-                                  }
-                              }
-
-                              // TO hit or not to hit is very complex so evaluate the opposite
-                              else if (moveData.Move.IsOpponentHit())
-                              {
-                                  if (!moveCandidate.Move.IsOpponentHit())
-                                  {
-                                      extraData.Add((moveData.BoardAfter, BackgammonGameHelper.Opponent(moveData.Player)));
-                                      Console.WriteLine($"Add Hit cand \n{backgammonBoard}");
-                                      break;
-                                  }
-                              }
-                              else
-                              {
-                                  if (moveCandidate.Move.IsOpponentHit())
-                                  {
-                                      extraData.Add((moveData.BoardAfter, BackgammonGameHelper.Opponent(moveData.Player)));
-                                      Console.WriteLine($"Add not Hit cand \n{backgammonBoard}");
-                                      break;
-                                  }
-                              }
-                          }
-                      }
-                  }*/
                 moveCount++;
             }
             return extraData;
+        }
+
+        //It's not good to be stuck on deuce and one point
+        private bool IsSplittingOrGoingForBetterAnchor(int[] position, Move move)
+        {
+            if (move.Player == Player1)
+            {
+                foreach (var checkerMove in move.CheckerMoves)
+                {
+                    if (checkerMove.From == AcePointP2 && position[AcePointP2] >= 2)
+                    {
+                        return true;
+                    }
+                    if (checkerMove.From == DeucePointP2 && position[DeucePointP2] >= 2)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            foreach (var checkerMove in move.CheckerMoves)
+            {
+                if (checkerMove.From == AcePointP1 && position[AcePointP1] <= -2)
+                {
+                    return true;
+                }
+                if (checkerMove.From == DeucePointP1 && position[DeucePointP1] <= -2)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

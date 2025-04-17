@@ -1,4 +1,6 @@
-﻿namespace Backgammon.Models
+﻿using NUnit.Framework;
+
+namespace Backgammon.Models
 {
     public class Move
     {
@@ -9,6 +11,7 @@
         private readonly int _die1;
         private readonly int _die2;
         private readonly int _player;
+        public int Player => _player;
 
         public Move(int die1, int die2, int player, List<CheckerMove>? checkerMoves = null, bool doubleOffer = false)
         {
@@ -78,7 +81,7 @@
                 var movesForNotation = _player == BackgammonBoard.Player2 ?
                     ConvertPlayer2MovesAsPlayer1() :
                     CheckerMoves;
-                movesForNotation = [.. movesForNotation.OrderByDescending(move => move.From).ThenBy(move => move.IsHit)];
+                movesForNotation = [.. movesForNotation.OrderByDescending(move => move.From).ThenByDescending(move => move.IsHit)];
                 if (_die1 != _die2)
                 {
                     foreach (var move in movesForNotation)
@@ -110,6 +113,7 @@
                     if (movesForNotation[0].From == movesForNotation[1].From && movesForNotation[2].From == movesForNotation[3].From
                         && movesForNotation[2].From == movesForNotation[0].To)
                     {
+                        //Moving 2 checkers from the same point all the way.
                         if (movesForNotation[3].IsBearOff)
                         {
                             notation += $" {movesForNotation[0].From}/Off";
@@ -135,6 +139,7 @@
                 for (int moveCount = 0; moveCount < movesForNotation.Count; moveCount++)
                 {
                     var move = movesForNotation[moveCount];
+                    //TestContext.Out.WriteLine(move.ToString());
                     if (prevFrom != move.From)
                     {
                         groupCount = 1;
@@ -148,7 +153,7 @@
                         else if (move.From == BackgammonBoard.OnTheBarP1)
                         {
                             notation += $" Bar/{move.To}";
-                        }
+                        }                        
                         else
                         {
                             notation += $" {move.From}/{move.To}";
@@ -157,6 +162,7 @@
                         {
                             notation += "*";
                         }
+                        //TestContext.Out.WriteLine(notation);
                     }
                     else
                     {
@@ -168,6 +174,7 @@
                     {
                         if (moveCount == movesForNotation.Count - 1) {// The last checker move
                             notation += $"({groupCount})";
+                            //TestContext.Out.WriteLine("Final grouping: " + notation);
                             return notation;
                         }
                         
@@ -175,6 +182,7 @@
                         if (nextMove.From != move.From)
                         {
                             notation += $"({groupCount})";
+                            //TestContext.Out.WriteLine("After Grouping: "+ notation);
                         }
                     }
 

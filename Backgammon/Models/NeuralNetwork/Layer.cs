@@ -1,5 +1,6 @@
 ﻿using Backgammon.Models.NeuralNetwork.ActivationFunctions;
 using Serilog;
+using System.ComponentModel.Design.Serialization;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.Intrinsics;
@@ -71,6 +72,10 @@ namespace Backgammon.Models.NeuralNetwork
         private long _calculations;
         private long _skippedCalculations;
         private bool _firstForwardPass = true;
+        private float[,] Z_History;
+        private const int Z_History_length=3;
+        private int Z_History_index=0;
+
         public bool FirstForwardPass => _firstForwardPass;
         public void ResetForwardTime()
         {
@@ -99,6 +104,24 @@ namespace Backgammon.Models.NeuralNetwork
             _inputsPrevious = new float[inputNodes];
             _ZPrevious = new float[outputNodes];
             EnableNNUE = enableNNUE;
+            _NNUEIsForwardReady = false;
+        }
+
+        //When adding inputs reset all related data so we treat the layer as a new one except we keep the old weights
+        public void IncreaseInputSize(int newInputSize) {
+            var increasedInputSizeWeights = new float[newInputSize, Weights.GetLength(1)];
+            InitializeMatrixXavier(increasedInputSizeWeights);
+            for (int i = 0; i < Weights.GetLength(0); i++)
+            {
+                for (int j = 0; j < Weights.GetLength(1); j++)
+                {
+                    increasedInputSizeWeights[i,j] = Weights[i,j];
+                }
+            }
+            Weights = increasedInputSizeWeights;
+
+            // Mark the layer as needing a reset for the forward pass
+            _firstForwardPass = true;
             _NNUEIsForwardReady = false;
         }
 
@@ -447,25 +470,40 @@ namespace Backgammon.Models.NeuralNetwork
 
         public virtual float[] FeedForward(float[] inputs)
         {
-            if (_firstForwardPass)
+            if (_firstForwardPass || _ZPrevious is null)
             {
                 _inputsPrevious = new float[inputs.Length];
                 _ZPrevious = new float[Biases.Length];
-            }
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
-            if (EnableNNUE && _NNUEIsForwardReady) {
-                FeedForwardNNUE(inputs);
+                Z_History = new float[Z_History_length,Biases.Length];
+                Z_History_index = 0;
             }
 
-            var activations = FeedForwardAVX(inputs);
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+            if (EnableNNUE && _NNUEIsForwardReady)
+            {
+                 FeedForwardNNUE(inputs);
+            }
+            else
+            {
+                FeedForwardAVX(inputs);
+            }
+            
+            if (EnableNNUE)
+            {
+                // Copy Z to Z history
+                for (int i = 0; i < Biases.Length; i++)
+                {
+                    Z_History[Z_History_index, i] = Z[i];
+                }
+                Z_History_index = (Z_History_index + 1) % Z_History_length; // Update the index in a circular manner
+            }
+
             _NNUEIsForwardReady = true;
             stopwatch.Stop();
-            //double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
-            //Console.WriteLine("Normal feedforward millis" + seconds*1000);
             forwardTime += stopwatch.ElapsedTicks;
             _firstForwardPass = false;
-            return activations;
+            return Activations;
         }
 
         public virtual float[] FeedForwardAVX(float[] inputs)
@@ -552,7 +590,6 @@ namespace Backgammon.Models.NeuralNetwork
             return array;
         }
 
-
         public float[] FeedForwardNNUE(float[] inputs)
         {
             var historyIndex = _forwardCount % _HistoryLength;
@@ -577,29 +614,19 @@ namespace Backgammon.Models.NeuralNetwork
                 //var zBefore = (float[])Z.Clone();
                 var inputsPreviousBefore = (float[])_inputsPrevious.Clone();
                 //var (activation, zSubtract, zAdd, zAddHist) = FeedForwardNNUEOld(inputs, nrOfChangedInputs);
-
-                // zAdd and zSubtract is for comparison
-                ProcessWithAVX2NNUELock(inputs, inputsPreviousBefore, changedInputs);
-
-                /*int inputLength = inputs.Length;
-                int neuronCount = Biases.Length;
-                object[] locks = new object[neuronCount];
-                for (int i = 0; i < neuronCount; i++)
-                {
-                    locks[i] = new object();
-                }
-                //var historyIndex = _forwardCount % _HistoryLength;
-
-                // Parallelize the loop over neurons
-                Parallel.For(0, neuronCount, j =>
-                {
-                    ProcessNeuronWithAVX2NNUE(j, inputs, _inputsPrevious, ref Z[j], inputLength, locks[j]);
-                    Activations[j] = ActivationFunction.Calculate(Z[j]); // Compute activation
-                    //_ActivationsHistory[j, historyIndex] = Activations[j]; // Store history for analysis
-                });*/
+                //if (ForwardCount == 1)
+                //{
+                    ProcessWithAVX2NNUE(inputs, inputsPreviousBefore, changedInputs);
+                //}
+                //else
+                //{
+                    //To use ZHist we must first have 2 forward pass 
+                  //  ProcessWithAVX2NNUELock(inputs, inputsPreviousBefore, changedInputs);
+                //}
             }
             else
             {
+                // To be implemented
                 Environment.Exit(0); // Exit if AVX2 is not supported
             }
 
@@ -613,9 +640,8 @@ namespace Backgammon.Models.NeuralNetwork
         }
 
         /*
-        private unsafe void ProcessWithAVX2NNUELockAndPrevZ(float[] inputs, float[] prevInputs, bool[] changedInputs)
+        private unsafe void ProcessWithAVX2NNUELockZHist(float[] inputs, float[] prevInputs, bool[] changedInputs)
         {
-
             int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
             List<int> changedIndices = new List<int>();
 
@@ -627,13 +653,18 @@ namespace Backgammon.Models.NeuralNetwork
                     changedIndices.Add(i);
                 }
             }
+            
+            // Calculate the correct index in the history to use
+            int zHistIndexToUse = (Z_History_index - 2 + Z_History_length) % Z_History_length;
+            Console.WriteLine("NNUE ZHist index"+ zHistIndexToUse);
+            // Copy Z from the history
+            for (int j = 0; j < Biases.Length; j++)
+            {
+                Z[j] = Z_History[zHistIndexToUse, j];
+            }
 
-            Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
+            //Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
             Stopwatch stopwatch = Stopwatch.StartNew();
-
-            // Create a copy of Z for comparison
-            float[] Z_Copy = new float[Z.Length];
-            Z.CopyTo(Z_Copy, 0);
 
             Parallel.For(0, Biases.Length, neuron =>
             {
@@ -667,12 +698,11 @@ namespace Backgammon.Models.NeuralNetwork
                             _calculations++;
 
                             // Compute the products separately
-                            var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
+                            //var previousProduct = Avx.Multiply(previousInputVector, weightsVector);
                             var inputProduct = Avx.Multiply(inputVector, weightsVector);
 
                             // Perform the subtraction and addition
                             var zVectorChunk = Vector256<float>.Zero;
-                            zVectorChunk = Avx.Subtract(zVectorChunk, previousProduct); // Subtract the previous contribution
                             zVectorChunk = Avx.Add(zVectorChunk, inputProduct); // Add the new contribution
 
                             // Apply the partial sum to Z at the correct indices
@@ -681,12 +711,6 @@ namespace Backgammon.Models.NeuralNetwork
                                 float zElement = zVectorChunk.GetElement(k);
                                 int idx = changedIndices[i + k];
                                 Z[neuron] += zElement;
-
-                                // Debugging intermediate results
-                                lock (Z_Copy) // Ensure thread-safe access to Z_Copy
-                                {
-                                    Z_Copy[neuron] += zElement;
-                                }
                             }
                         }
                     }
@@ -696,15 +720,7 @@ namespace Backgammon.Models.NeuralNetwork
                     {
                         int idx = changedIndices[i];
                         _calculations++;
-                        Z[neuron] -= prevInputs[idx] * Weights[idx, neuron];
                         Z[neuron] += inputs[idx] * Weights[idx, neuron];
-
-                        // Debugging intermediate results
-                        lock (Z_Copy) // Ensure thread-safe access to Z_Copy
-                        {
-                            Z_Copy[neuron] -= prevInputs[idx] * Weights[idx, neuron];
-                            Z_Copy[neuron] += inputs[idx] * Weights[idx, neuron];
-                        }
                     }
 
                     // Apply activation function
@@ -714,19 +730,9 @@ namespace Backgammon.Models.NeuralNetwork
 
             stopwatch.Stop();
             double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
-            Console.WriteLine("NNUE Forwardtime milliseconds" + seconds * 1000);
-
-            // Compare Z_Copy with Z to identify discrepancies
-            for (int i = 0; i < Z.Length; i++)
-            {
-                if (Math.Abs(Z[i] - Z_Copy[i]) > 0.001)
-                {
-                    Console.WriteLine($"Z values differ at [{i}]: {Z[i]} != {Z_Copy[i]}");
-                }
-            }
         }*/
 
-        private unsafe void ProcessWithAVX2NNUELock(float[] inputs, float[] prevInputs, bool[] changedInputs)
+        private unsafe void ProcessWithAVX2NNUE(float[] inputs, float[] prevInputs, bool[] changedInputs)
         {
             int vectorSize = Vector256<float>.Count; // The number of floats in a 256-bit vector, which is 8
             List<int> changedIndices = new List<int>();
@@ -742,10 +748,9 @@ namespace Backgammon.Models.NeuralNetwork
 
             //Console.WriteLine("Changed inputs:" + changedIndices.Count + " indexes" + string.Join(",", changedIndices));
             Stopwatch stopwatch = Stopwatch.StartNew();
-
-            // Create a copy of Z for comparison
-            float[] Z_Copy = new float[Z.Length];
-            Z.CopyTo(Z_Copy, 0);
+            
+            // For testing
+           
 
             Parallel.For(0, Biases.Length, neuron =>
             {
@@ -793,12 +798,6 @@ namespace Backgammon.Models.NeuralNetwork
                                 float zElement = zVectorChunk.GetElement(k);
                                 int idx = changedIndices[i + k];
                                 Z[neuron] += zElement;
-
-                                // Debugging intermediate results
-                                lock (Z_Copy) // Ensure thread-safe access to Z_Copy
-                                {
-                                    Z_Copy[neuron] += zElement;
-                                }
                             }
                         }
                     }
@@ -810,13 +809,6 @@ namespace Backgammon.Models.NeuralNetwork
                         _calculations++;
                         Z[neuron] -= prevInputs[idx] * Weights[idx, neuron];
                         Z[neuron] += inputs[idx] * Weights[idx, neuron];
-
-                        // Debugging intermediate results
-                        lock (Z_Copy) // Ensure thread-safe access to Z_Copy
-                        {
-                            Z_Copy[neuron] -= prevInputs[idx] * Weights[idx, neuron];
-                            Z_Copy[neuron] += inputs[idx] * Weights[idx, neuron];
-                        }
                     }
 
                     // Apply activation function
@@ -826,16 +818,6 @@ namespace Backgammon.Models.NeuralNetwork
 
             stopwatch.Stop();
             double seconds = (double)stopwatch.ElapsedTicks / Stopwatch.Frequency;
-            //Console.WriteLine("NNUE Forwardtime milliseconds" + seconds * 1000);
-
-            // Compare Z_Copy with Z to identify discrepancies
-            for (int i = 0; i < Z.Length; i++)
-            {
-                if (Math.Abs(Z[i] - Z_Copy[i]) > 0.001)
-                {
-                    Console.WriteLine($"Z values differ at [{i}]: {Z[i]} != {Z_Copy[i]}");
-                }
-            }
         }
 
 
@@ -1120,8 +1102,6 @@ namespace Backgammon.Models.NeuralNetwork
             Console.WriteLine("NNUE Forwardtime" + stopwatch.ElapsedMilliseconds);
 
         }
-
-
 
         /// <summary>
         /// Calculate the new activation by finding out which inputs differs from previous inputs

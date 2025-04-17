@@ -1,6 +1,4 @@
-﻿using System.CodeDom;
-
-namespace Backgammon.Models
+﻿namespace Backgammon.Models
 {
     public class GameData
     {

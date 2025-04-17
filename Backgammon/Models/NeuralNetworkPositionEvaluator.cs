@@ -1,8 +1,8 @@
 ﻿using Backgammon.Models.NeuralNetwork;
 using Backgammon.Models;
 using static Backgammon.Util.Constants;
-using Backgammon.Util;
 using Backgammon.Utils;
+using Backgammon.Util.NeuralEncoding;
 
 public class NeuralNetworkPositionEvaluator : IBackgammonPositionEvaluator
 {
@@ -19,7 +19,8 @@ public class NeuralNetworkPositionEvaluator : IBackgammonPositionEvaluator
     public float[] Evaluate(int[] position, int player)
     {
         // Assuming NeuralNetwork has a method EvaluatePosition
-        var (inputData, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(position, _positionType, player);
+        var (inputData, labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(position, _positionType, player);
+        _neuralNetwork.SetInputLabels(labels);// A bit ugly temporar solution
         var predict = _neuralNetwork.FeedForward(inputData);
 
         if (MirrorBoardForPlayer2 && player == BackgammonBoard.Player2)

@@ -109,15 +109,26 @@ namespace Backgammon.Models.NeuralNetwork
             return null; // Return null if an error occurred
         }
 
+        private void addInputs(int newInputSize)
+        {
+            Console.Write("Adding new inputs! " + newInputSize);
+            Layers[0].IncreaseInputSize(newInputSize);
+        }
+
         public void AddFirstLayer(int inputNodes, int outputNodes, IActivationFunction activationFunction)
         {
             var layer = new Layer(inputNodes, outputNodes, activationFunction, _Logger, true);
             Layers.Add(layer);
         }
 
-        public void EnableNNUE()
+        public void EnableNNUE(bool enableNNUE)
         {
-            Layers[0].EnableNNUE = true;
+            Layers[0].EnableNNUE = enableNNUE;
+        }
+
+        public bool IsEnabledForNNUE()
+        {
+            return Layers[0].EnableNNUE;
         }
 
         public void AddFirstLayerNNUE(int inputNodes, int outputNodes, IActivationFunction activationFunction)
@@ -184,8 +195,11 @@ namespace Backgammon.Models.NeuralNetwork
             float[] layerActivations = inputs;
             // Debugging code
             var firstLayer = Layers[0];
-            //Tempfix for changing loaded nets
-            firstLayer.EnableNNUE = true;
+            if (inputs.Length > firstLayer.Weights.GetLength(0))
+            {
+                addInputs(inputs.Length);
+            }
+
             if (inputs.Length != firstLayer.Weights.GetLength(0))
             {
                 throw new InvalidOperationException("inputs doesnt match" + Description + "in" + inputs.Length + "W:" + firstLayer.Weights.GetLength(0));
@@ -335,7 +349,7 @@ namespace Backgammon.Models.NeuralNetwork
             }
         }
 
-        public void Compare(NeuralNetwork network)
+        public bool Compare(NeuralNetwork network)
         {
             for (int i = 0; i < Layers.Count; i++)
             {
@@ -346,9 +360,11 @@ namespace Backgammon.Models.NeuralNetwork
                 if (!isSame)
                 {
                     Console.WriteLine("layer differ!");
-                    Environment.Exit(0);
+                    return false;
+                    //Environment.Exit(0);
                 }
             }
+            return true;
         }
 
 
@@ -409,10 +425,16 @@ namespace Backgammon.Models.NeuralNetwork
             labeledWeights.Sort((x, y) => y.maxWeight.CompareTo(x.maxWeight));
 
             // Print the sorted results
+            int maxFeatures = 20;
+            int featureCount = 0;
             foreach (var (label, maxWeight) in labeledWeights)
             {
+                if (featureCount == maxFeatures)
+                    break;
                 Console.Write($"{label}: {Math.Round(maxWeight, 3)} , ");
+                featureCount++;
             }
+            Console.WriteLine("\n");
         }
 
 

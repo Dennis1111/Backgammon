@@ -1,11 +1,12 @@
-﻿using Backgammon.GamePlay;
-using Backgammon.Models;
+﻿using Backgammon.Models;
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util;
 using Backgammon.Util.AI;
 using Backgammon.Utils;
 using Serilog;
 using static Backgammon.Util.Constants;
+using static Backgammon.Models.BackgammonBoard;
+using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.Training
 {
@@ -16,17 +17,8 @@ namespace Backgammon.Training
 
         public GameDataTrainer(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators, string logFilePath)
         {
-            //_neuralNetworks = neuralNetworks;
-            // Optional: Clear the log file at startup
-            // ClearLogFile(logFilePath);
-            // Configure Serilog
             _trainLogger = CreateLogger(logFilePath); // Initialize the custom logger
             _minMaxUtility = new MinMaxUtility(positionEvaluators);
-            //_minMaxUtility.useClampValues(ClampMin, ClampMax);
-            //_bearOffDatabase = bearOffDatabase;
-
-            // Make sure to flush and close the logger
-            // Log.CloseAndFlush();
         }
 
         private ILogger CreateLogger(string logFilePath)
@@ -41,7 +33,7 @@ namespace Backgammon.Training
         {
             BackgammonBoard backgammonBoard = new BackgammonBoard();
             backgammonBoard.Position = trainingData.board;
-            if (BackgammonBoard.IsAnyBackgame(trainingData.board))
+            if (IsAnyBackgame(trainingData.board))
             {
                 Console.WriteLine($"Train board \n {backgammonBoard}");
                 Console.WriteLine($"PositionType \n {positionType}");
@@ -79,19 +71,19 @@ namespace Backgammon.Training
                 var ply = 1;
                 (_, float[] scoreVector) = _minMaxUtility.EvaluatePositionAverage(trainingBoard, playerAtTurn, ply);
                 
-                //It should work fine withouth combining finalVector but I think can be useful in early training
-                var scoreVectorWeight = 1.0f;
+                //It should work fine withouth combining finalVector but I think it can be useful in early training
+                var scoreVectorWeight = 0.99f;
                 var scoreVectorCombined = CombineVectors(scoreVector, finalScoreVector, scoreVectorWeight);
                 _trainLogger.Information(" ScoreVec MinMax" + string.Join(", ", scoreVector));
                 _trainLogger.Information("Final ScoreVec MinMax" + string.Join(", ", finalScoreVector));
                 _trainLogger.Information(" ScoreVecCombined" + string.Join(", ", scoreVectorCombined));
                 scoreVector = scoreVectorCombined;
                 //var modelIndex = BoardToNeuralInputsEncoder.MapBoardToModel(trainingBoard);
-                var positionType = BackgammonBoard.MapBoardToPositionType(trainingBoard);
+                var positionType = MapBoardToPositionType(trainingBoard, playerAtTurn);
 
                 var (inputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(trainingBoard, positionType, playerAtTurn);
 
-                if (MirrorBoardForPlayer2 && elem.Player == BackgammonBoard.Player2)
+                if (MirrorBoardForPlayer2 && elem.Player == Player2)
                 {
                     var mirroredScore = ScoreUtility.MirrorScore(scoreVector);
                     // the inputs is already mirrored by EncodeBoardToNeuralInputs

@@ -2,6 +2,7 @@
 using Backgammon.Models.NeuralNetwork;
 using Backgammon.Models;
 using static Backgammon.Util.Constants;
+using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.Util.AI
 {
@@ -9,75 +10,73 @@ namespace Backgammon.Util.AI
     {
         private static readonly int[] NoContactPosition = BackgammonPositions.BearOffGamesNoContact[0];
 
+        private static void AddContactTypeEvaluator(PositionType positionType, int hiddens1, int hiddens2, String modelsDir, String logDir, String Description, Dictionary<PositionType, IBackgammonPositionEvaluator> dict) {
+            NeuralNetwork nn = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, Description);
+            var posEvaluator = new NeuralNetworkPositionEvaluator(nn, positionType);
+            dict.Add(positionType, posEvaluator);
+        }
+
         public static Dictionary<PositionType, IBackgammonPositionEvaluator> GetBackgammonPosEvaluators(String modelsDir, String logDir) {
             Dictionary<PositionType, IBackgammonPositionEvaluator> dict = [];
-            NeuralNetwork noContact = NoContactNeuralNetwork(modelsDir,logDir, "NoContactNN");
-            var posEvaluatorNoContact = new NeuralNetworkPositionEvaluator(noContact, PositionType.NoContact);
-            dict.Add(PositionType.NoContact, posEvaluatorNoContact);
 
+            var positionType = PositionType.NoContact;
+            NeuralNetwork noContact = NoContactNeuralNetwork(modelsDir,logDir, "NoContactNN");
+            var posEvaluatorNoContact = new NeuralNetworkPositionEvaluator(noContact, positionType);
+            dict.Add(positionType, posEvaluatorNoContact);
+
+            positionType = PositionType.BearOff;
             NeuralNetwork bearOff = NoContactNeuralNetwork(modelsDir, logDir, "BearOff");
-            var posEvaluatorBearoff = new NeuralNetworkPositionEvaluator(bearOff, PositionType.BearOff);
-            dict.Add(PositionType.BearOff, posEvaluatorBearoff);
+            var posEvaluatorBearoff = new NeuralNetworkPositionEvaluator(bearOff, positionType);
+            dict.Add(positionType, posEvaluatorBearoff);
 
             var hiddens1 = 32;
             var hiddens2 = 16;
-            var contactNN = ContactNeuralNetwork(modelsDir, logDir,  hiddens1, hiddens2, "ContactNN16");
-            var posEvaluatorContact = new NeuralNetworkPositionEvaluator(contactNN, PositionType.Contact);
-            dict.Add(PositionType.Contact, posEvaluatorContact);
+            // I Should clean this up with some method
+            AddContactTypeEvaluator(PositionType.EarlyGame, hiddens1, hiddens2, modelsDir, logDir, "EarlyGame", dict);
+            AddContactTypeEvaluator(PositionType.Contact, hiddens1, hiddens2, modelsDir, logDir, "Contact", dict);
+          
+            AddContactTypeEvaluator(PositionType.HoldingGame, hiddens1, hiddens2, modelsDir, logDir, "HoldingGame", dict);
+            
+            AddContactTypeEvaluator(PositionType.MutualHoldingGame, hiddens1, hiddens2, modelsDir, logDir, "MutualHoldingGame", dict);
+            AddContactTypeEvaluator(PositionType.ButterFlyAnchor, hiddens1, hiddens2, modelsDir, logDir, "ButterFlyAnchor", dict);
+            AddContactTypeEvaluator(PositionType.DeucePointAnchor, hiddens1, hiddens2, modelsDir, logDir, "DeucePointAnchor", dict);
+            AddContactTypeEvaluator(PositionType.WeakContact, hiddens1, hiddens2, modelsDir, logDir, "WeakContact", dict);
+            AddContactTypeEvaluator(PositionType.Backgame12, hiddens1, hiddens2, modelsDir, logDir, "Backgame12", dict);
 
-            var backgame12 = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "Backgame12");
-            var posEvaluatorBackgame12 = new NeuralNetworkPositionEvaluator(backgame12, PositionType.Backgame12);
-            dict.Add(PositionType.Backgame12, posEvaluatorBackgame12);
+            AddContactTypeEvaluator(PositionType.Backgame13, hiddens1, hiddens2, modelsDir, logDir, "Backgame13", dict);
+            
+            AddContactTypeEvaluator(PositionType.Backgame23, hiddens1, hiddens2, modelsDir, logDir, "Backgame23", dict);
+            AddContactTypeEvaluator(PositionType.OtherBackgame, hiddens1, hiddens2, modelsDir, logDir, "OtherBackgame", dict);
+            AddContactTypeEvaluator(PositionType.PrimeVsPrime, hiddens1, hiddens2, modelsDir, logDir, "PrimeVsPrime", dict);
+            AddContactTypeEvaluator(PositionType.SixPrime, hiddens1, hiddens2, modelsDir, logDir, "SixPrime", dict);
 
-            var backgame13 = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "Backgame13");
-            var posEvaluatorBackgame13 = new NeuralNetworkPositionEvaluator(backgame13, PositionType.Backgame13);
-            dict.Add(PositionType.Backgame13, posEvaluatorBackgame13);
+            AddContactTypeEvaluator(PositionType.FivePrime, hiddens1, hiddens2, modelsDir, logDir, "FivePrime", dict);
 
-            var backgame23 = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "Backgame23");
-            var posEvaluatorBackgame23 = new NeuralNetworkPositionEvaluator(backgame23, PositionType.Backgame23);
-            dict.Add(PositionType.Backgame23, posEvaluatorBackgame23);
+            AddContactTypeEvaluator(PositionType.FourPrime, hiddens1, hiddens2, modelsDir, logDir, "FourPrime", dict);
 
-            var backgameOther = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "OtherBackgame");
-            var posEvaluatorBackgameOther = new NeuralNetworkPositionEvaluator(backgameOther, PositionType.OtherBackgame);
-            dict.Add(PositionType.OtherBackgame, posEvaluatorBackgameOther);
+            AddContactTypeEvaluator(PositionType.CompletedStage, hiddens1, hiddens2, modelsDir, logDir, "CompletedStage", dict);
+            AddContactTypeEvaluator(PositionType.BigRaceLead, hiddens1, hiddens2, modelsDir, logDir, "BigRaceLead", dict);
 
-            var sixPrime = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "SixPrime");
-            var posEvaluatorSixPrime = new NeuralNetworkPositionEvaluator(sixPrime, PositionType.SixPrime);
-            dict.Add(PositionType.SixPrime, posEvaluatorSixPrime);
+            AddContactTypeEvaluator(PositionType.Crunched, hiddens1, hiddens2, modelsDir, logDir, "CrunchedStage", dict);
 
-            var fivePrime = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "FivePrime");
-            var posEvaluatorFivePrime = new NeuralNetworkPositionEvaluator(fivePrime, PositionType.FivePrime);
-            dict.Add(PositionType.FivePrime, posEvaluatorFivePrime);
+            AddContactTypeEvaluator(PositionType.BigCrunch, hiddens1, hiddens2, modelsDir, logDir, "BigCrunch", dict);
 
-            var completedStage = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "CompletedStage");
-            var posEvaluatorCompletedStage = new NeuralNetworkPositionEvaluator(completedStage, PositionType.CompletedStage);
-            dict.Add(PositionType.CompletedStage, posEvaluatorCompletedStage);
-
-            var crunchedStage = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "CrunchedStage");
-            var posEvaluatorCrunchedStage = new NeuralNetworkPositionEvaluator(crunchedStage, PositionType.Crunched);
-            dict.Add(PositionType.Crunched, posEvaluatorCrunchedStage);
-
-            var bearOffContact = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, "BearOffContact");
-            var bearOffContactStage = new NeuralNetworkPositionEvaluator(bearOffContact, PositionType.BearoffContact);
-            dict.Add(PositionType.BearoffContact, bearOffContactStage);
-
+            AddContactTypeEvaluator(PositionType.BearOffContact, hiddens1, hiddens2, modelsDir, logDir, "BearOffContact", dict);
+            AddContactTypeEvaluator(PositionType.BearOffContactDefence, hiddens1, hiddens2, modelsDir, logDir, "BearOffContactDef", dict);
+            AddContactTypeEvaluator(PositionType.BearOffVsBackgame, hiddens1, hiddens2, modelsDir, logDir, "BearOffVsBackgame", dict);
+            AddContactTypeEvaluator(PositionType.BearOffVs1Point, hiddens1, hiddens2, modelsDir, logDir, "BearOffVs1Point", dict);
+            AddContactTypeEvaluator(PositionType.BearOffVs1PointDefence, hiddens1, hiddens2, modelsDir, logDir, "BearOffVs1PointDef", dict);
             setInputLabels(dict);
             return dict;
         }
 
-        private static void AddNeuralNetworkToDict(Dictionary<PositionType, IBackgammonPositionEvaluator> dict, 
-            string description, int hiddens1, int hiddens2, PositionType positionType, string modelsDir, string logDir) {
-            var nn = ContactNeuralNetwork(modelsDir, logDir, hiddens1, hiddens2, description);
-            var posEvaluatorContact = new NeuralNetworkPositionEvaluator(nn, positionType);
-            dict.Add(positionType, posEvaluatorContact);
-        }
-
+        // This code is ugly (always using BarPointMutualHoldingGame but any valid pos works) , ok for now 
         private static void setInputLabels(Dictionary<PositionType, IBackgammonPositionEvaluator> neuralNetworkDict) {
             foreach (var (positionType, nn) in neuralNetworkDict)
             {
                 if (nn is NeuralNetworkPositionEvaluator neuralNetworkEvaluator)
                 {
-                    var (_, labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BarpointHoldingGame, positionType);
+                    var (_, labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BarPointMutualHoldingGame, positionType);
                     neuralNetworkEvaluator.NeuralNetwork.SetInputLabels(labels);                   
                 }
             }
@@ -92,7 +91,7 @@ namespace Backgammon.Util.AI
             {
                 var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeContactGameToNeuralInputs(BackgammonPositions.TwoOneSlotOpening);
                 Console.WriteLine("creating new Contact NN" + encodedInputs.Length);
-                modelContact = GetLeakyNNUENeuralNetworkModel(encodedInputs.Length, 16, 16,logDir);
+                modelContact = GetLeakyNNUENeuralNetworkModel(encodedInputs.Length, 32, 16,logDir);
                 // Handle the case where the network could not be loaded
                 
             }
@@ -110,70 +109,11 @@ namespace Backgammon.Util.AI
                 var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(NoContactPosition, modelIndexNoContact);
                 Console.WriteLine("creating new nn no contact" + encodedInputs.Length);
                 modelNoContact = GetNoContactNNUENeuralNetworkModel(encodedInputs.Length, logDir);
-                
-                // Handle the case where the network could not be loaded
             }
             modelNoContact.DetfaultfilePath = modelFile;
             return modelNoContact;
         }
 
-        private static NeuralNetwork BackgameNeuralNetwork(string modelsDir, string modelDescription, string logDir)
-        {
-            var modelFile = Path.Combine(modelsDir, modelDescription + ".json");
-            var modelIndexNoContact = BoardToNeuralInputsEncoder.MapBoardToModel(NoContactPosition);
-            NeuralNetwork? modelNoContact = NeuralNetwork.Load(modelFile);
-            if (modelNoContact is null)
-            {
-                var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(NoContactPosition, modelIndexNoContact);
-                Console.WriteLine("creating new nn" + modelDescription + encodedInputs.Length);
-                modelNoContact = GetNoContactNNUENeuralNetworkModel(encodedInputs.Length, logDir);
-                modelNoContact.DetfaultfilePath = modelFile;
-                // Handle the case where the network could not be loaded
-            }
-            return modelNoContact;
-        }
-
-
-        public static NeuralNetwork[] getNeuralNetworks(String modelsDir, String logDir)
-        {
-                var models = new NeuralNetwork[2];
-            var backgammonBoard = new BackgammonBoard();
-            var startPos = backgammonBoard.Position;
-            var modelIndexStartPos = BoardToNeuralInputsEncoder.MapBoardToModel(startPos);//->1
-
-            var modelDescription = "ContactNN";
-            var modelFile = Path.Combine(modelsDir, modelDescription + ".json");
-            Console.WriteLine("models file" + modelFile);
-            NeuralNetwork? modelContact = NeuralNetwork.Load(modelFile);
-            if (modelContact is null)
-            {
-                var (encodedInputs, inputLabels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(startPos, modelIndexStartPos);
-                Console.WriteLine("creating new Contact NN" + encodedInputs.Length);
-                modelContact = GetLeakyNNUENeuralNetworkModel(encodedInputs.Length,64,32,logDir);
-                // Handle the case where the network could not be loaded
-                
-                Console.WriteLine("models Contact default" + modelContact.DetfaultfilePath);
-            }
-            modelContact.DetfaultfilePath = modelFile;
-            models[modelIndexStartPos] = modelContact;
-
-            modelDescription = "NoContactNN";
-            modelFile = Path.Combine(modelsDir, modelDescription + ".json");
-
-            var modelIndexNoContact = BoardToNeuralInputsEncoder.MapBoardToModel(NoContactPosition);
-            NeuralNetwork? modelNoContact = NeuralNetwork.Load(modelFile);
-            if (modelNoContact is null)
-            {
-                var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(NoContactPosition, modelIndexNoContact);
-                Console.WriteLine("creating new nn no contact" + encodedInputs.Length);
-                modelNoContact = GetNoContactNNUENeuralNetworkModel(encodedInputs.Length, logDir);
-                
-                // Handle the case where the network could not be loaded
-            }
-            modelNoContact.DetfaultfilePath = modelFile;
-            models[modelIndexNoContact] = modelNoContact;
-            return models;
-        }
 
         static NeuralNetwork GetNoContactNNUENeuralNetworkModel(int inputSize, string loggerPath)
         {
@@ -203,14 +143,68 @@ namespace Backgammon.Util.AI
             // Add layers
             model.AddFirstLayer(inputSize, hiddens1, new LeakyReluActivationFunction());
             model.AddLayer(hiddens2, new LeakyReluActivationFunction());
-            //model.AddLayer(8, new LeakyReluActivationFunction());
-            //model.AddLayer(128, new LeakyReluActivationFunction());
-            //model.AddLayer(8, new LeakyReluActivationFunction());
             model.AddLayer(6, new SigmoidActivationFunction()); // Assuming 6 outputs for the scores
-            //model.AddLayer(6, new LeakyReluActivationFunction()); // Assuming 6 outputs for the scores
             return model;
-            // SmallModel LeakyRelu 10,8, Linear 6 lasso LR/10 seems robust for learning Bearoff no dead nodes.!
         }
+
+        /*
+private static NeuralNetwork BackgameNeuralNetwork(string modelsDir, string modelDescription, string logDir)
+{
+    var modelFile = Path.Combine(modelsDir, modelDescription + ".json");
+    var modelIndexNoContact = BoardToNeuralInputsEncoder.MapBoardToModel(NoContactPosition);
+    NeuralNetwork? modelNoContact = NeuralNetwork.Load(modelFile);
+    if (modelNoContact is null)
+    {
+        var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(NoContactPosition, modelIndexNoContact);
+        Console.WriteLine("creating new nn" + modelDescription + encodedInputs.Length);
+        modelNoContact = GetNoContactNNUENeuralNetworkModel(encodedInputs.Length, logDir);
+        modelNoContact.DetfaultfilePath = modelFile;
+        // Handle the case where the network could not be loaded
+    }
+    return modelNoContact;
+}
+
+
+public static NeuralNetwork[] getNeuralNetworks(String modelsDir, String logDir)
+{
+        var models = new NeuralNetwork[2];
+    var backgammonBoard = new BackgammonBoard();
+    var startPos = backgammonBoard.Position;
+    var modelIndexStartPos = BoardToNeuralInputsEncoder.MapBoardToModel(startPos);//->1
+
+    var modelDescription = "ContactNN";
+    var modelFile = Path.Combine(modelsDir, modelDescription + ".json");
+    Console.WriteLine("models file" + modelFile);
+    NeuralNetwork? modelContact = NeuralNetwork.Load(modelFile);
+    if (modelContact is null)
+    {
+        var (encodedInputs, inputLabels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(startPos, modelIndexStartPos);
+        Console.WriteLine("creating new Contact NN" + encodedInputs.Length);
+        modelContact = GetLeakyNNUENeuralNetworkModel(encodedInputs.Length,64,32,logDir);
+        // Handle the case where the network could not be loaded
+
+        Console.WriteLine("models Contact default" + modelContact.DetfaultfilePath);
+    }
+    modelContact.DetfaultfilePath = modelFile;
+    models[modelIndexStartPos] = modelContact;
+
+    modelDescription = "NoContactNN";
+    modelFile = Path.Combine(modelsDir, modelDescription + ".json");
+
+    var modelIndexNoContact = BoardToNeuralInputsEncoder.MapBoardToModel(NoContactPosition);
+    NeuralNetwork? modelNoContact = NeuralNetwork.Load(modelFile);
+    if (modelNoContact is null)
+    {
+        var (encodedInputs, _) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(NoContactPosition, modelIndexNoContact);
+        Console.WriteLine("creating new nn no contact" + encodedInputs.Length);
+        modelNoContact = GetNoContactNNUENeuralNetworkModel(encodedInputs.Length, logDir);
+
+        // Handle the case where the network could not be loaded
+    }
+    modelNoContact.DetfaultfilePath = modelFile;
+    models[modelIndexNoContact] = modelNoContact;
+    return models;
+}*/
 
         /*
 static NeuralNetwork GetLeakyNNUESigmoidNeuralNetworkModel(int inputSize)

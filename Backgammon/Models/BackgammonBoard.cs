@@ -135,11 +135,12 @@ namespace Backgammon.Models
         }
 
         //Return the score from player1 1s perspective
-        public static int Score(int[] position, int cube) { 
+        public static int Score(int[] position, int cube)
+        {
             var score = 0;
             var scoreAsVector = ScoreAsVector(position);
-            if (scoreAsVector[2]==1)
-                return 3*cube;
+            if (scoreAsVector[2] == 1)
+                return 3 * cube;
             if (scoreAsVector[1] == 1)
                 return 2 * cube;
             if (scoreAsVector[0] == 1)
@@ -232,7 +233,7 @@ namespace Backgammon.Models
             Position[SixPointP1] = 5;
             Position[EightPointP1] = 3;
             Position[MidPointP2] = -5;
-            
+
             //The top (Player 2) side
             Position[AcePointP2] = 2;
             Position[SixPointP2] = -5; // Player 2 starting position
@@ -248,39 +249,39 @@ namespace Backgammon.Models
             return PipCountStatic(this.Position);
         }
 
-        internal static (int pipsPlayer1, int pipsPlayer2) PipCountStatic(int[] points)
+        internal static (int pipsPlayer1, int pipsPlayer2) PipCountStatic(int[] position)
         {
             int pipsPlayer1 = 0;
             int pipsPlayer2 = 0;
             for (int i = 1; i <= 24; i++)
             {
-                if (points[i] > 0)
+                if (position[i] > 0)
                 {
-                    pipsPlayer1 += i * points[i];
+                    pipsPlayer1 += i * position[i];
                 }
-                else if (points[i] < 0)
+                else if (position[i] < 0)
                 {
-                    pipsPlayer2 -= (25 - i) * points[i];
+                    pipsPlayer2 -= (25 - i) * position[i];
                 }
             }
             return (pipsPlayer1, pipsPlayer2);
         }
 
-        internal static (int pipsPlayer1, int pipsPlayer2) PipCountBackgameTiming(int[] points)
+        internal static (int pipsPlayer1, int pipsPlayer2) PipCountBackgameTiming(int[] position)
         {
             int pipsPlayer1 = 0;
             int pipsPlayer2 = 0;
             for (int i = 1; i <= 18; i++)
             {
-                if (points[i] > 0)
+                if (position[i] > 0)
                 {
-                    pipsPlayer1 += i * points[i];
+                    pipsPlayer1 += i * position[i];
                 }
             }
 
             for (int i = 1; i <= 18; i++)
             {
-                var checkers = points[AcePointP2 - i + 1];
+                var checkers = position[AcePointP2 - i + 1];
                 if (checkers > 0)
                 {
                     pipsPlayer2 += i * checkers;
@@ -296,35 +297,21 @@ namespace Backgammon.Models
         }
 
         // Static method to check if a game has ended given a points array
-        public static bool GameEndedStatic(int[] points)
+        public static bool GameEndedStatic(int[] position)
         {
             // Assuming points[CheckersOffP1] counts up for Player 1 and 
             // points[CheckersOffP2] counts up for Player 2, adjust the logic if it's different
             //Console.WriteLine(string.Join(", ", points));
             //Console.WriteLine("p1 off" + points[CheckersOffP1]);
             //Console.WriteLine("p2 off" + points[CheckersOffP2]);
-            return points[CheckersOffP1] == 15 || points[CheckersOffP2] == -15;
+            return position[CheckersOffP1] == 15 || position[CheckersOffP2] == -15;
         }
 
-        // Static method to check if there's still contact between the players' checkers
-        internal static bool StillContact(int[] position)
+        public static (int, int) LastCheckers(int[] position)
         {
-            if (GameEndedStatic(position))
-                return false;
-
-            /*int lastCheckerP1 = 0;
-            // We need to check 25 points The bar and board points
-            for (int i = 0; i < 25; i++)
-            {
-                var pointCheckP1 = points[i + 1];
-                if (points[i + 1] > 0)
-                {
-                    lastCheckerP1 = i;
-                }
-            }*/
-            
             int lastCheckerP1 = 0;
-            for (int i = OnTheBarP1; i >= AcePointP1; i--) {
+            for (int i = OnTheBarP1; i >= AcePointP1; i--)
+            {
                 if (position[i] > 0)
                 {
                     lastCheckerP1 = i;
@@ -342,25 +329,39 @@ namespace Backgammon.Models
                 }
             }
 
-            /*for (int i = 0; i < 25; i++)
+            // Adjusted logic based on 0-based indexing in C#
+            return (lastCheckerP1, lastCheckerP2);
+        }
+       
+
+        // Static method to check if there's still contact between the players' checkers
+        public static (bool, int) StillContact(int[] position)
+        {
+            if (GameEndedStatic(position))
+                return (false, 0);
+
+            int lastCheckerP1 = 0;
+            for (int i = OnTheBarP1; i >= AcePointP1; i--)
             {
-                // First we check the bar then the rest of the board
-                var player1PointIndex = AcePointP1 + i;
-                //Should loop 1..25
-                if (points[i + 1] > 0)
+                if (position[i] > 0)
                 {
                     lastCheckerP1 = i;
+                    break;
                 }
-                var player2PointIndex = AcePointP2 - i;
-                //Should loop 24..0
-                if (points[player2PointIndex] < 0)
-                {
-                    lastCheckerP2 = player2PointIndex;
-                }
-            }*/
+            }
 
+            int lastCheckerP2 = 0;
+            for (int i = OnTheBarP2; i <= AcePointP2; i++)
+            {
+                if (position[i] < 0)
+                {
+                    lastCheckerP2 = i;
+                    break;
+                }
+            }
+            
             // Adjusted logic based on 0-based indexing in C#
-            return lastCheckerP1 > lastCheckerP2;
+            return (lastCheckerP1 > lastCheckerP2, lastCheckerP1 - lastCheckerP2);
         }
 
         // Internal static method to check if a gammon has been saved for a specific player
@@ -389,7 +390,8 @@ namespace Backgammon.Models
                 return true;
             }
 
-            if (StillContact(position))
+            var (stillContact, _) = StillContact(position);
+            if (stillContact)
             {
                 return false; // As long as there is contact, you can be sent back
             }
@@ -470,6 +472,15 @@ namespace Backgammon.Models
             return (checkerMove, pointsCopy);
         }
 
+        /// <summary>
+        /// Return the new position when moving a checker as long as it is not a bearoff 
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="fromPos"></param>
+        /// <param name="die"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         internal static (CheckerMove checkerMove, int[] updatedPoints) MoveChecker(int[] position, int fromPos, int die, int player)
         {
             int[] pointsCopy = (int[])position.Clone();
@@ -492,11 +503,11 @@ namespace Backgammon.Models
                     checkerMove = new CheckerMove(fromPos, targetPos, isHit: false);
                 }
             }
-            else // Assuming Player2
+            else
             {
                 pointsCopy[fromPos] += 1;
                 targetPos = fromPos + die;
-                if (pointsCopy[targetPos] == 1) // Hit opponent
+                if (pointsCopy[targetPos] == 1)
                 {
                     pointsCopy[targetPos] = -1;
                     pointsCopy[OnTheBarP1] += 1;
@@ -621,6 +632,16 @@ namespace Backgammon.Models
         }
 
         // Method to generate legal checker moves for a given die roll and player
+        /// <summary>
+        /// Given a position and die find the next possible checker move. If the player is on the bar we have bear in that checker before doing anything else.
+        /// If not on the bar we start searching from the checker that has longest distance to move (searchFrom = 1).
+        /// When we he have checked all possible moves from point 1 we want to call this method with searchFrom increased
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="die"></param>
+        /// <param name="player"></param>
+        /// <param name="searchFrom"></param>
+        /// <returns></returns>
         private static List<(CheckerMove move, int[] board, int searchFrom)> GenerateLegalCheckerMoves(int[] position, int die, int player, int searchFrom = 1)
         {
             var movesAndBoards = new List<(CheckerMove move, int[] board, int searchFrom)>();
@@ -629,15 +650,15 @@ namespace Backgammon.Models
                 if (IsValidCheckerMoveFromTheBar(position, die, player))
                 {
                     int pointFrom = player == Player1 ? OnTheBarP1 : OnTheBarP2;
-                    var (move, board) = MoveChecker(position, pointFrom, die, player); // Placeholder for actual implementation
+                    var (move, board) = MoveChecker(position, pointFrom, die, player);
                     searchFrom = 1; // Reset search start when moving from the bar
                     movesAndBoards.Add((move, board, searchFrom));
                 }
             }
             else
             {
-                bool isBearOffAllowed = IsBearOffAllowed(position, player); // Placeholder for actual implementation
-                //Console.WriteLine("IsBearoffAllowed"+ isBearOffAllowed);
+                bool isBearOffAllowed = IsBearOffAllowed(position, player);
+                // When the bearoff is not allowed we can't move checkers from the Acepoint so we only need to scan 23 points (when not on the bar)
                 int searchTo = isBearOffAllowed ? 24 : 23;
 
                 for (int point = searchFrom; point <= searchTo; point++)
@@ -663,6 +684,18 @@ namespace Backgammon.Models
             return movesAndBoards;
         }
 
+
+        /// <summary>
+        /// From a gives position and list of dies find all Legal Moves for the player that is to move
+        /// If N moves is possible to do it's not allowed to do M moves where N > M with some possible exceptions in the bearoff
+        /// (as an example with one remaing checker on the 6 point and rolling 16 Both 6/off and 6/5 5/off is allowed)
+        ///         /// 
+        /// </summary>
+        /// <param name="movesWithBoards"></param>
+        /// <param name="dies"></param>
+        /// <param name="player"></param>
+        /// <param name="incSearchFrom">when true If previous dice was used to move from point n, then for the next dice searh from n+1 </param>
+        /// <returns>All the legal moves and true if it was possible to make a move with all dies</returns>
         private static (List<(Move move, int[] board, int searchFrom)>, bool) GenerateLegalMovesHelper(
            List<(Move move, int[] board, int searchFrom)> movesWithBoards, List<int> dies, int player, bool incSearchFrom = false)
         {
@@ -670,17 +703,23 @@ namespace Backgammon.Models
             while (dies.Count > 0)
             {
                 int die = dies[0];
-                dies = dies.GetRange(1, dies.Count - 1); // Equivalent to Python's dies[1:]
+                dies = dies.GetRange(1, dies.Count - 1); // Remove the first die from the remaining list
                 List<(Move move, int[] board, int searchFrom)> tempMovesWithBoards = new List<(Move move, int[] board, int searchFrom)>();
 
                 foreach (var moveWithBoard in movesWithBoards)
                 {
                     var (tempMove, tempBoard, searchFrom) = moveWithBoard;
+                    
                     if (dies.Count == 0 && incSearchFrom)
                     {
-                        searchFrom += 1;
+                        var moveFrom = tempMove.CheckerMoves.Last().From;
+                        bool moveFromTheBar = moveFrom == OnTheBarP1 || moveFrom == OnTheBarP2;                        
+                        if (!moveFromTheBar)
+                        {
+                            searchFrom += 1;
+                        }
                     }
-                    var checkerMovesAndBoards = GenerateLegalCheckerMoves(tempBoard, die, player, searchFrom); // Placeholder for actual implementation
+                    var checkerMovesAndBoards = GenerateLegalCheckerMoves(tempBoard, die, player, searchFrom);
 
                     if (checkerMovesAndBoards.Count > 0)
                     {
@@ -695,7 +734,7 @@ namespace Backgammon.Models
                         incompleteMoves.Add(moveWithBoard);
                     }
                 }
-
+                //This assignment should be forgotten after return so feels as bad code
                 movesWithBoards = tempMovesWithBoards;
             }
 
@@ -709,7 +748,7 @@ namespace Backgammon.Models
         // Method to generate all legal moves for a given pair of non-double dice rolls
         private static List<(Move move, int[] board, int searchFrom)> GenerateLegalMovesNonDouble(int[] position, int die1, int die2, int player)
         {
-            Move emptyMove = new(die1,die2, player);
+            Move emptyMove = new(die1, die2, player);
             int searchFrom = 1; // Start looping from the ace point
             var movesWithBoardsInit = new List<(Move move, int[] board, int searchFrom)> { (emptyMove, position, searchFrom) };
 
@@ -834,11 +873,166 @@ namespace Backgammon.Models
             return GenerateLegalMovesStatic(this.Position, die1, die2, player, removeDuplicates);
         }
 
-        public static int CountPrimes(int[] position, int player)
+        /// <summary>
+        /// Return the longest prime
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        public static (int longestPrime, int startsAtIndex) CountPrimes(int[] position, int player)
+        {
+            int longestPrime = 0;
+            int currentPrime = 0;
+            // When the prime has reached the 1 Point it doesnt have the same classification value
+            // For instance A 4 prime that starts at the 1 point just needs a 5 from the bar to escape
+            // So just loop to the 23 Point
+            // Need some more consideration here...
+            
+            int primeStartsAt = 0;// The prime starts with the point nearest to bearoff
+            if (player == Player2)
+            {
+                for (int i = MidPointP2; i <= AcePointP2; i++)
+                {
+                    if (position[i] <= -2)
+                    {
+                        currentPrime++;
+                    }
+                    else
+                    {
+                        if (currentPrime >= longestPrime)
+                        {
+                            if (currentPrime <= 2 && i-1 >= FourPointP2) {
+                                continue;// We don't want to treat small deep primes like a prime, like if 32 and 2 point is take early it has no prime value
+                            }
+                            longestPrime = currentPrime;
+                            primeStartsAt = i-1;
+                        }
+                        currentPrime = 0;
+                    }
+                }
+                return (longestPrime, primeStartsAt);
+            }
+
+            for (int i = MidPointP1; i >= AcePointP1 ; i--)
+            {
+                if (position[i] >= 2)
+                {
+                    currentPrime++;
+                }
+                else
+                {
+                    if (currentPrime >= longestPrime)
+                    {
+                        if (currentPrime <= 2 && i+1 <= FourPointP1)
+                        {
+                            continue;// We don't want to treat small deep primes like a prime, like if 32 and 2 point is take early it has no prime value
+                        }
+                        longestPrime = currentPrime;
+                        primeStartsAt = i+1;
+                    }
+                    currentPrime = 0;
+                }
+            }
+            return (longestPrime, primeStartsAt);
+        }
+
+        /// <summary>
+        /// Find the max number of points taken within 6 points
+        /// It's possible this will not be a prime at all like the sequence xx_x_x would return 4 though only a 2 prime
+        /// First create a window a size 6 and count the amount of points, then slide the window forward
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        public static (int longestPrime, int startsAtIndex) CountBrokenPrimes(int[] position, int player)
+        {
+            const int windowSize = 6;
+            int currentWindowCount = 0;
+
+            if (player == Player2)
+            {
+                int primeStartsAtP2 = MidPointP2;
+                int largestBrokenPrimeP2 = 0;
+
+                // Initialize the first window of size 6
+                for (int i = MidPointP2; i < MidPointP2 + windowSize; i++)
+                {
+                    if (position[i] <= -2)
+                    {
+                        currentWindowCount++;
+                    }
+                }
+                largestBrokenPrimeP2 = currentWindowCount;
+
+                // Slide the window across the board
+                for (int i = MidPointP2 + windowSize; i <= AcePointP2; i++)
+                {
+                    // Remove the influence of the element that's exiting the window
+                    if (position[i - windowSize] <= -2)
+                    {
+                        currentWindowCount--;
+                    }
+                    // Add the influence of the new element entering the window
+                    if (position[i] <= -2)
+                    {
+                        currentWindowCount++;
+                    }
+                    // Update the largest broken prime if current window count is greater
+                    if (currentWindowCount > largestBrokenPrimeP2)
+                    {
+                        largestBrokenPrimeP2 = currentWindowCount;
+                        primeStartsAtP2 = i - windowSize + 1; // Update the start index
+                    }
+                }
+                return (largestBrokenPrimeP2, primeStartsAtP2);
+            }
+
+            // Assume Player1 if not Player2
+            int primeStartsAtP1 = MidPointP1;
+            int largestBrokenPrimeP1 = 0;
+            currentWindowCount = 0;
+
+            // Initialize the first window of size 6
+            for (int i = MidPointP1; i > MidPointP1 - windowSize; i--)
+            {
+                if (position[i] >= 2)
+                {
+                    currentWindowCount++;
+                }
+            }
+            largestBrokenPrimeP1 = currentWindowCount;
+
+            // Slide the window across the board
+            for (int i = MidPointP1 - windowSize; i >= AcePointP1; i--)
+            {
+                // Remove the influence of the element that's exiting the window
+                if (position[i + windowSize] >= 2)
+                {
+                    currentWindowCount--;
+                }
+                // Add the influence of the new element entering the window
+                if (position[i] >= 2)
+                {
+                    currentWindowCount++;
+                }
+                // Update the largest broken prime if current window count is greater
+                if (currentWindowCount > largestBrokenPrimeP1)
+                {
+                    largestBrokenPrimeP1 = currentWindowCount;
+                    primeStartsAtP1 = i; // Update the start index
+                }
+            }
+            return (largestBrokenPrimeP1, primeStartsAtP1);
+        }
+
+        /*public static (int primeLength, int frontPoint) CountPrimesWithPos(int[] position, int player)
         {
             int longestPrime = 0;
             int currentPrime = 0;
 
+            if (player == Player1) { 
+            
+            }
             for (int i = 1; i <= 24; i++)
             {
                 if ((player == Player1 && position[i] >= 2) || (player == Player2 && position[i] <= -2))
@@ -847,14 +1041,19 @@ namespace Backgammon.Models
                 }
                 else
                 {
+                    if (currentPrime > longestPrime)
+                    {
+
+                    }
                     longestPrime = Math.Max(longestPrime, currentPrime);
+
                     currentPrime = 0;
                 }
             }
 
             longestPrime = Math.Max(longestPrime, currentPrime);
             return longestPrime;
-        }
+        }*/
 
         public static int CountBlots(int[] position, int player)
         {
@@ -904,7 +1103,7 @@ namespace Backgammon.Models
         {
             if (position[DeucePointP1] <= -2 && position[ThreePointP1] <= -2)
                 return true;
-            if (position[DeucePointP2] >= 2 && position[DeucePointP2] >= 2)
+            if (position[DeucePointP2] >= 2 && position[ThreePointP2] >= 2)
                 return true;
             return false;
         }
@@ -918,10 +1117,10 @@ namespace Backgammon.Models
             {
                 if (position[AcePointP1 + i] <= -2)
                     player2BackgamePoints++;
-                if (position[AcePointP2-i] >= 2)
+                if (position[AcePointP2 - i] >= 2)
                     player1BackgamePoints++;
             }
-            return player1BackgamePoints>=2 || player2BackgamePoints>=2;
+            return player1BackgamePoints >= 2 || player2BackgamePoints >= 2;
         }
 
 
@@ -957,17 +1156,20 @@ namespace Backgammon.Models
         public static bool IsCompletedStage(int[] position)
         {
             var player1CompletedStage = true;
-            for (int i = OnTheBarP1; i > MidPointP1; i--) {
-                if (position[i] > 0) {
+            for (int i = OnTheBarP1; i > MidPointP1; i--)
+            {
+                if (position[i] > 0)
+                {
                     player1CompletedStage = false;
                     break;
                 }
             }
-            
-            if (player1CompletedStage) { 
+
+            if (player1CompletedStage)
+            {
                 return true;
             }
-            
+
             for (int i = OnTheBarP2; i < MidPointP2; i++)
             {
                 if (position[i] < 0)
@@ -978,9 +1180,10 @@ namespace Backgammon.Models
             return true;
         }
 
-        public static (int deadCheckersP1, int deadCheckersP2) DeadCheckers(int[] points) {
-            // Lets check 1 to 3 point for dead checkers
-            var deadCheckersP1 = 0;
+        public static (int deadCheckersP1, int deadCheckersP2) DeadCheckers(int[] points)
+        {
+            // Lets check 1 to 3 point for dead checkers and also checkers taken off
+            var deadCheckersP1 = points[CheckersOffP1];
             for (int i = 0; i < 3; i++)
             {
                 var checkers = points[AcePointP1 + i];
@@ -995,7 +1198,7 @@ namespace Backgammon.Models
             }
 
             // Lets check 1 to 3 points for dead checkers
-            var deadCheckersP2 = 0;
+            var deadCheckersP2 = -points[CheckersOffP2];
             for (int i = 0; i < 3; i++)
             {
                 var checkers = -points[AcePointP2 - i];
@@ -1011,37 +1214,405 @@ namespace Backgammon.Models
             return (deadCheckersP1, deadCheckersP2);
         }
 
-        
-/*        public static bool isBearOffPos(int[] points) {
-            // Check player 1 first
-            var sumCheckers =0;
-            for (int =0)
-            return true;
-        }*/
-
-        public static PositionType MapBoardToPositionType(int[] position)
+        public static (int keithP1, int keithP2) KeithPenalty(int[] position)
         {
-            if (!StillContact(position))
+            int keithPenaltyP1 = 0;
+            if (position[AcePointP1] > 1)
             {
-                if (IsBearOffAllowed(position,Player1) && IsBearOffAllowed(position,Player2)) {
+                keithPenaltyP1 += (position[AcePointP1] - 1) * 2;
+            }
+            if (position[DeucePointP1] > 1)
+            {
+                keithPenaltyP1 += position[AcePointP1] - 1;
+            }
+            if (position[ThreePointP1] > 3)
+            {
+                keithPenaltyP1 += position[AcePointP1] - 1;
+            }
+            if (position[FourPointP1] == 0)
+            {
+                keithPenaltyP1++;
+            }
+            if (position[GoldenPointP1] == 0)
+            {
+                keithPenaltyP1++;
+            }
+            if (position[SixPointP1] == 0)
+            {
+                keithPenaltyP1++;
+            }
+            
+            int keithPenaltyP2 = 0;
+            if (-position[AcePointP2] > 1)
+            {
+                keithPenaltyP2 += (-position[AcePointP1] - 1) * 2;
+            }
+            if (-position[DeucePointP2] > 1)
+            {
+                keithPenaltyP2 += -position[AcePointP1] - 1;
+            }
+            if (-position[ThreePointP2] > 3)
+            {
+                keithPenaltyP2 += -position[AcePointP1] - 1;
+            }
+            if (position[FourPointP2] == 0)
+            {
+                keithPenaltyP2++;
+            }
+            if (position[GoldenPointP2] == 0)
+            {
+                keithPenaltyP2++;
+            }
+            if (position[SixPointP2] == 0)
+            {
+                keithPenaltyP2++;
+            }
+            return (keithPenaltyP1, keithPenaltyP2);
+        }
+
+        //If any of the points 4567 is take we have a strong holding game (The 6 point will be a very rare case)
+        public static bool AdvancedAnchor(int[] position, int player)
+        {
+            if (player == Player1)
+            {
+                for (int i = FourPointP2; i >= BarPointP2; i--)
+                {
+                    if (position[i] >= 2)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            for (int i = FourPointP1; i <= BarPointP1; i++)
+            {
+                if (position[i] <= -2)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static (int itz1, int itz2) CheckersInTheZone(int[] position) {
+            var CheckersinTheZoneP1 = 0;
+            var CheckersinTheZoneP2 = 0;
+            for (int i = AcePointP1; i <= AcePointP1 + 10; i++) {
+                if (position[i] > 0)
+                {
+                    CheckersinTheZoneP1 += position[i];
+                }
+            }
+
+            for (int i = AcePointP2; i >= AcePointP2 - 10; i--)
+            {
+                if (-position[i] > 0)
+                {
+                    CheckersinTheZoneP2 -= position[i];
+                }
+            }
+            return (CheckersinTheZoneP1, CheckersinTheZoneP2);
+        }
+
+        public static (int, int) CheckersInOppHomeBoard(int[] position) {
+            var checkersInOppHomeBoardP1 = 0;
+            for (int i = OnTheBarP1; i >= SixPointP2; i--) {
+                if (position[i] > 0) {
+                    checkersInOppHomeBoardP1 += position[i];
+                }
+            }
+            var checkersInOppHomeBoardP2 = 0;
+            for (int i = OnTheBarP2; i <= SixPointP1; i++)
+            {
+                if (position[i] < 0)
+                {
+                    checkersInOppHomeBoardP2 -= position[i];
+                }
+            }
+
+            return (checkersInOppHomeBoardP1, checkersInOppHomeBoardP2);
+        }
+
+        public static int CountInnerBoardPoints(int[] board, int player)
+        {
+            int safeCount = 0;
+            for (int point = 1; point <= 6; point++)
+            {
+                if ((player == Player1 && board[point] >= 2) || (player == Player2 && board[point + 18] <= -2))
+                {
+                    safeCount++;
+                }
+            }
+            return safeCount;
+        }
+
+        // When opp have an anchor on 345 point it can be quite valuable to have many outfield blocking point
+        // But for consistance lets do a check on 54321 points
+        // I feel like it's hard for the nn to learn to take outfield broken prime which is high prio when we were behind
+        // It's of cause valuable for blocking a single blot also
+        // Search for the most advanced anchor and then find out how blocked it is but if no advanced anchor use a single blot instead
+        public static int LastAnchorOrCheckerIsBlocked(int[] position, int blockedPlayer) {
+            //int[] blockedPoints = new int[6]; Could be valuable to know which points are blocking also
+            int blockingCount = 0;
+            int blockedPoint = 0;
+            if (blockedPlayer == Player1)
+            {
+                for (int i = GoldenPointP2; i <= AcePointP2; i++)
+                {
+                    if (position[i] >= 2)
+                    {
+                        blockedPoint = i;
+                        break;
+                    }
+                }
+
+                //If no anchor is found search for the first blot instead
+                if (blockedPoint == 0)
+                {
+                    for (int i = GoldenPointP2; i <= AcePointP2; i++)
+                    {
+                        if (position[i] == 1)
+                        {
+                            blockedPoint = i;
+                            break;
+                        }
+                    }
+                }
+
+                // No checker to block have been found
+                if (blockedPoint == 0)
+                {
+                    return 0;
+                }
+
+                for (int i = 1; i <= 6; i++)
+                {
+                    if (position[blockedPoint - i] <= -2)
+                    {
+                        blockingCount++;
+                    }
+                }
+                return blockingCount;
+            }
+
+            // Find out how blocked Player 2 is
+            for (int i = GoldenPointP1; i >= AcePointP1; i--)
+            {
+                if (position[i] <= -2)
+                {
+                    blockedPoint = i;
+                    break;
+                }
+            }
+
+            // If no anchor is found search for the first blot instead
+            if (blockedPoint == 0)
+            {
+                for (int i = GoldenPointP1; i >= AcePointP1; i--)
+                {
+                    if (position[i] == -1)
+                    {
+                        blockedPoint = i;
+                        break;
+                    }
+                }
+            }
+
+            // No checker to block have been found
+            if (blockedPoint == 0)
+            {
+                return 0;
+            }
+
+            for (int i = 1; i <= 6; i++)
+            {
+                if (position[blockedPoint + i] >= 2)
+                {
+                    blockingCount++;
+                }
+            }
+            return blockingCount;
+        }
+
+        // To bear off safely its valuable to count the checkers at the 2 last points, often an even number like 22,33 is good (22 can leave a double shot though)
+        // 23 is ok (leaves a shot only to large double) while 32 is much worse
+        public static (int last, int secondLast) CountCheckersAtTheBack(int[] position, int player) {
+            bool checkingLastPoint=true;
+
+            if (player == Player1) {
+                int lastP1 = 0;
+                for (int i = SixPointP1; i>=AcePointP1; i--) {
+                    if (position[i] > 0) {
+                        if (checkingLastPoint)
+                        {
+                            lastP1 = position[i];
+                            checkingLastPoint = false;
+                        }
+                        else {
+                            return (lastP1, position[i]);
+                        }
+                    }
+                }
+                // Only one point to clear
+                return (lastP1, 0);
+            }
+            int lastP2 = 0;
+            checkingLastPoint = true;
+            for (int i = SixPointP2; i <= AcePointP2; i++)
+            {
+                if (position[i] < 0)
+                {
+                    if (checkingLastPoint)
+                    {
+                        lastP2 = position[i];
+                        checkingLastPoint = false;
+                    }
+                    else
+                    {
+                        return (lastP2, position[i]);
+                    }
+                }
+            }
+            // Only one point to clear
+            return (lastP2, 0);
+        }
+
+        /// <summary>
+        /// From opponents most backward checker lets find the largest 'Gap'. lets count all points that are not 'safe' as part of gaps
+        /// The risk of leaving blots in the BearOff depends on largest gapSize 
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="player"></param>
+        /// <param name="lastCheckerP1"></param>
+        /// <param name="lastCheckerP2"></param>
+        /// <returns></returns>
+        public static int BearOffMaxGap(int[] position, int player, int lastCheckerP1, int lastCheckerP2)
+        {
+            int largestGap = 0;
+
+            if (player == Player1)
+            {
+                for (int i = lastCheckerP1; i > lastCheckerP2; i--)
+                {
+                    if (position[i] >= 2)
+                    {
+                        int gapCount = 0;
+                        for (int gapPointCand = i - 1; gapPointCand > lastCheckerP2; gapPointCand--)
+                        {
+                            if (position[gapPointCand] < 2)
+                            {
+                                gapCount++;
+                                if (gapCount > largestGap)
+                                {
+                                    largestGap = gapCount;
+                                }
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else if (player == Player2)
+            {
+                for (int i = lastCheckerP2; i < lastCheckerP1; i++)
+                {
+                    if (position[i] <= -2)
+                    {
+                        int gapCount = 0;
+                        for (int gapPointCand = i + 1; gapPointCand < lastCheckerP1; gapPointCand++)
+                        {
+                            if (position[gapPointCand] > -2)
+                            {
+                                gapCount++;
+                                if (gapCount > largestGap)
+                                {
+                                    largestGap = gapCount;
+                                }
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return largestGap;
+        }
+
+        /// <summary>
+        /// We use different neural networks for different kind of positions, its not obvious how to best split into categories
+        /// but categories that differs a lot in evaluations are backgames, crunched positions, strong primes lets start from the end of the game
+        /// 1. No contact positions can be divided into
+        /// 1A Pure bear off positions where both sides is bearing off, (currently my bear off database handles up to 7 seven remaining checkers)
+        /// so the neural network has to dela with the remainder
+        /// 1B Only one side is allowed to bear off (here crossovers are important to save gammon or win the race)
+        /// 
+        /// 2. Bearing off vs contact
+        /// 2A1 Bearing off vs the 1Point is one of the most common scenarios and I think it needs it's own network (however once opp has crunched -> CrunchedNet)
+        /// The bearing off player has evaluate playing safe vs going for gammons
+        /// 2A2 Defending against bearing Off from the 1point, The defending side must master playing pure, avoid crunching, keep the anchor or run to save gammons
+        /// 
+        /// 2B1 Bearing off vs Other contact (for instance vs deuce point, three point, closed board with checkers on the bar (perhaps another category))
+        /// 2B2 Defending against Bearing off vs Other contact (for instance vs deuce point, three point, closed board with checkers on the bar (perhaps another category))
+        
+        /// 3. Completed stage. There is still contact but the player at the completed is normally favourite and how much depends on remaining contact + race
+        /// Should we have 2 nets here also ?
+        /// 
+        /// 4. Backgames We have different networks for 12,13,23 as they are the strongest backgames but also very sensitive to timing.
+        /// 
+        /// 5. Other backgames. Any backgame that also involves the 4 or 5 point
+        /// 
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="player"></param>
+        /// <returns>The PositionType</returns>
+        public static PositionType MapBoardToPositionType(int[] position, int player)
+        {
+            // var backgammonBoard = new BackgammonBoard();
+            //backgammonBoard.Position = position;
+            // Console.WriteLine(backgammonBoard);
+            var (stillContact, contactDistance) = StillContact(position);
+
+            if (!stillContact)
+            {
+                if (IsBearOffAllowed(position, Player1) && IsBearOffAllowed(position, Player2))
+                {
                     return PositionType.BearOff;
                 }
                 return PositionType.NoContact;
             }
 
             (var deadCheckersP1, var deadCheckersP2) = DeadCheckers(position);
-            // 3 dead checkers is a small crunch start but should already greatly affect the gamestrategy,
+
+            if (deadCheckersP2 >= 6 || deadCheckersP1 >= 6)
+            {
+                return PositionType.BigCrunch;
+            }
+
+            var innerBoardStrengthP1 = CountInnerBoardPoints(position, Player1);
+            var innerBoardStrengthP2 = CountInnerBoardPoints(position, Player2);
+
+            if (deadCheckersP1 == 0 && innerBoardStrengthP1 <= 1 && deadCheckersP2 == 0 && innerBoardStrengthP2 <= 1) {
+                return PositionType.EarlyGame;
+            }
+
+            // 3 dead checkers is a small crunch start but should already greatly affect the Game Strategy,
             // playing pure with more risks
-            if (deadCheckersP1 >= 3 || deadCheckersP2 >= 3) {
-                /*Console.WriteLine("Crunched stage");
-                var board = new BackgammonBoard();
-                board.Position = position;
-                Console.WriteLine(board);*/
+            if ((deadCheckersP1 >= 3 && innerBoardStrengthP1 < 4) || (deadCheckersP2 >= 3 && innerBoardStrengthP2 < 4))
+            {
                 return PositionType.Crunched;
             }
 
-            //12,13,23 Backgames are the backgames with most critical timing
-            if (IsAnyBackgame(position))
+            var isBackgame = IsAnyBackgame(position);
+
+            // 12, 13, 23 Backgames are the backgames with most critical timing
+            if (isBackgame)
             {
                 if (IsOneTwoBackgame(position))
                     return PositionType.Backgame12;
@@ -1052,57 +1623,145 @@ namespace Backgammon.Models
                 return PositionType.OtherBackgame;
             }
             
-            var primeP1 = CountPrimes(position, Player1);
-            var primeP2 = CountPrimes(position, Player1);
+            var isBearOffAllowedP1 = IsBearOffAllowed(position, Player1);
+            var isBearOffAllowedP2 = IsBearOffAllowed(position, Player2);
             
-            if (primeP1 == 6 || primeP2 == 6) {
+            // 2. Bear Off with contact
+            if (isBearOffAllowedP1 || isBearOffAllowedP2)
+            {
+                //var backgammonBoard = new BackgammonBoard();
+                //backgammonBoard.Position = position;
+                //Console.WriteLine(backgammonBoard);
+
+
+                if (isBackgame) {
+                    return PositionType.BearOffVsBackgame;
+                }
+                
+                if (position[AcePointP1] <= -2) {
+                    if (player == Player1)
+                    {
+                        return PositionType.BearOffVs1Point;
+                    }
+                    else
+                    {
+                        return PositionType.BearOffVs1PointDefence;
+                    }
+                }
+
+                if (position[AcePointP2] >= 2) {
+                    if (player == Player2)
+                    {
+                        return PositionType.BearOffVs1Point;
+                    }
+                    else
+                    {
+                        return PositionType.BearOffVs1PointDefence;
+                    }
+                }
+                
+                if ((isBearOffAllowedP1 && player == Player1) || (isBearOffAllowedP2 && player == Player2))
+                {
+                    return PositionType.BearOffContact;
+                }
+                else {
+                    return PositionType.BearOffContactDefence;
+                }
+            }
+
+            var (checkersInOppHomeBoardP1, checkersInOppHomeBoardP2) = CheckersInOppHomeBoard(position);
+            var (primeP1, primeStartsAtP1) = CountPrimes(position, Player1);
+            var (primeP2, primeStartsAtP2) = CountPrimes(position, Player2);
+
+            var advancedAnchorP1 = AdvancedAnchor(position, Player1);
+            var advancedAnchorP2 = AdvancedAnchor(position, Player2);
+
+            // In a mutual holding game the priming value is not so valuable
+            if (advancedAnchorP1 && advancedAnchorP2)
+            {
+                return PositionType.MutualHoldingGame;
+            }
+
+            bool player1IsPrimed = primeP2 >= 3 && primeStartsAtP2 >= GoldenPointP2 && checkersInOppHomeBoardP1>0;
+            bool player2IsPrimed = primeP1 >= 3 && primeStartsAtP1 <= GoldenPointP1 && checkersInOppHomeBoardP2>0;
+            // 6 and 5 primes are outstanding strong so I think we should have neural nets for those primes
+            // Atleast one player must have checkers that need to escape
+            // 1. Six Prime P1 vs Six Prime
+            // 1a. Six Prime P1 opp anchor vs Six Prime
+            // 1b. Six Prime P1 and 1 or more to escape vs Six Prime
+            // 1c. Six Prime P1 no trapped Vs Six Prime
+            
+            // SixPrimeContactP1VsSixPrimeContactP2
+            // SixPrimeContactP1VsFivePrimeContactP2
+            // SixPrimeContactP1_Ch1 P1 has A SixPrime and opponent has 1 Checker to escape
+            // SixPrimeContactP1_Ch2 P1 has A SixPrime and opponent has 2 or more Checkers to escape
+            // SixPrimeContactP2_Ch1 P2 has A SixPrime and opponent has 1 Checker to escape
+            // SixPrimeContactP2_Ch2 P2 has A SixPrime and opponent has 2 or more Checker to escape
+
+            // Haven't thought this through enough, when do we want 'prime vs prime' ?
+            // Perhaps should have different prime VS prime Categories (primeVs6Prime, primeVs5Prime, primeVsPrime)
+            if ((primeP1 == 6 && player2IsPrimed) || (primeP2 == 6 && player1IsPrimed))
+            {
+                // A 4 prime vs 6Prime still has good priming chances
+                if (Math.Min(primeP1,primeP2) > 4 && player2IsPrimed && player1IsPrimed)
+                {
+                    return PositionType.PrimeVsPrime;
+                }
                 return PositionType.SixPrime;
             }
 
-            if (primeP1 == 5 || primeP2 == 5)
+            if (((primeP1 == 5 && player2IsPrimed) || (primeP2 == 5 && player1IsPrimed)) && Math.Min(primeP2, primeP1) >= 4)
             {
+                if (Math.Min(primeP1, primeP2) > 4 && player2IsPrimed && player1IsPrimed)
+                {
+                    return PositionType.PrimeVsPrime;
+                }
                 return PositionType.FivePrime;
             }
-
-            // Bearoff with contact
-            if (IsBearOffAllowed(position, Player1) || IsBearOffAllowed(position, Player2))
-            {
-                return PositionType.BearoffContact;
+            
+            if (player1IsPrimed && player2IsPrimed) {
+                return PositionType.PrimeVsPrime;
             }
 
-            if (IsCompletedStage(position)) {
-                //Console.WriteLine("Completed stage");
-                //var board = new BackgammonBoard();
-                //board.Position = position;
-                //Console.WriteLine(board);
+            if ((primeP1 == 4 && player2IsPrimed) || (primeP2 == 4 && player2IsPrimed))
+            {
+                return PositionType.FourPrime;
+            }
+
+            if (contactDistance < 6) {
+                // When the contact is lower then 6 there will be much fewer shots
+                return PositionType.WeakContact;
+            }
+
+            if (advancedAnchorP1 || advancedAnchorP2)
+            {
+                return PositionType.HoldingGame;
+            }
+
+            if (position[ThreePointP2] >= 2 || position[ThreePointP1] <= -2) {
+                return PositionType.ButterFlyAnchor;
+            }
+
+            if (position[DeucePointP2] >= 2 || position[DeucePointP1] <= -2)
+            {
+                return PositionType.DeucePointAnchor;
+            }
+
+            var (pipCountP1, pipCountP2) = PipCountStatic(position);
+
+            // Should maybe also take into account player on roll (worth 4 pip) and pip wastage
+            // The race affects the strategy a lot but its hard to decide when we want to override other position types
+            if (Math.Abs(pipCountP1 - pipCountP2) > 20)
+            {
+                return PositionType.BigRaceLead;
+            }
+
+            if (IsCompletedStage(position))
+            {
                 return PositionType.CompletedStage;
             }
 
-            
-
             return PositionType.Contact;
         }
-
-        /*// Feels perhaps belongs elsewher
-        public void SwitchPlayer()
-        {
-            CurrentPlayer = CurrentPlayer == Player1 ? Player2 : Player1;
-        }*/
-
-        /*
-        // Example method to apply a move (simplified for demonstration)
-        // A Move could be a defined class that includes start and end points, etc.
-        public void ApplyMove(Move move)
-        {
-            // Logic to apply the move to the Points array and update the game state
-            // This is a simplified placeholder for actual move logic
-            // You would also need to validate the move before applying it
-
-            // After applying the move, switch to the next player
-            SwitchPlayer();
-        }*/
-
-        // Additional methods to support gameplay, such as validating moves,
-        // determining legal moves, and checking for game end conditions
     }
 }
