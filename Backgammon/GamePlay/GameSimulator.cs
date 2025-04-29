@@ -21,15 +21,30 @@ namespace Backgammon.GamePlay
         private readonly MinMaxUtility _minMaxUtility;
         private Dictionary<PositionType, IBackgammonPositionEvaluator> _positionEvaluators;
 
-        public GameSimulator(Dictionary<PositionType, IBackgammonPositionEvaluator> positionEvaluators, string logFileDirectory)
+        /// <summary>
+        /// Simulates backgammon games and provides functionality for training neural networks.
+        /// </summary>
+        public GameSimulator()
         {
-            _positionEvaluators = positionEvaluators;
-            _gameLogger = CreateLogger(logFileDirectory + "//games.log"); // Initialize the custom logger
-            _moneyGameLogger = CreateLogger(logFileDirectory + "//games.log"); // Initialize the custom logger
-            _extraGamesLogger = CreateLogger(logFileDirectory + "//ExtraGames.log"); // Initialize the custom logger
+            string dataPath = Environment.GetEnvironmentVariable("BG_DATA_PATH");
+            // Set up directories
+            var modelsDir = Path.Combine(dataPath, "neuralnets");
+            _logdir = Path.Combine(dataPath, "logs");
+
+            // Load position evaluators
+            _positionEvaluators = NeuralNetworkManager.GetBackgammonPosEvaluators(modelsDir, _logdir);
+
+            // Load or create the bear-off database
+            var bearOffDatabase = BearOffDatabaseUtil.LoadOrCreateBearOffDatabase(modelsDir);
+            var bearOffEvaluator = new BearoffDatabaseEvaluator(bearOffDatabase);
+            _positionEvaluators.Add(PositionType.BearOffDatabase, bearOffEvaluator);
+
+            // Initialize other components
+            _gameLogger = CreateLogger(Path.Combine(_logdir, "games.log"));
+            _moneyGameLogger = CreateLogger(Path.Combine(_logdir, "moneygames.log"));
+            _extraGamesLogger = CreateLogger(Path.Combine(_logdir, "ExtraGames.log"));
             _board = new BackgammonBoard();
-            _minMaxUtility = new MinMaxUtility(positionEvaluators);
-            _logdir = logFileDirectory;
+            _minMaxUtility = new MinMaxUtility(_positionEvaluators);
         }
 
         private ILogger CreateLogger(string logFilePath)
@@ -40,26 +55,11 @@ namespace Backgammon.GamePlay
                 .CreateLogger();
         }
 
-        static void ClearOldLogFiles(string logDirectory, string logFilePrefix, int retentionDays)
-        {
-            var now = DateTime.UtcNow;
-            foreach (var filePath in Directory.GetFiles(logDirectory, $"*.log"))
-            {
-                var fileName = Path.GetFileNameWithoutExtension(filePath);
-                File.Delete(filePath);
-            }
-        }
-
-        static void ClearLogFile(string filePath)
-        {
-            // Clear the file if it exists
-            if (File.Exists(filePath))
-            {
-                File.WriteAllText(filePath, string.Empty);
-            }
-        }
-
-
+        /// <summary>
+        /// Simulates a specified number of backgammon games.
+        /// </summary>
+        /// <param name="numberOfGames">The number of games to simulate.</param>
+        /// <returns>A list of <see cref="GameData"/> objects representing the simulated games.</returns>
         public List<GameData> SimulateGames(int numberOfGames)
         {
             List<GameData> playedGames = new List<GameData>();
@@ -75,12 +75,19 @@ namespace Backgammon.GamePlay
             return playedGames;
         }
 
+        /// <summary>
+        /// Exports a game to a file in a readable format that can also be read by other backgammon software.
+        /// </summary>
+        /// <param name="gameData">The game data to export.</param>
         public void exportGameToFile(GameData gameData)
-        {
-            List<String> gameNotations = [];
-            gameNotations.Add("1 Point Match");
-            gameNotations.Add(" Game 1");
-            gameNotations.Add("Player1 : 0                            Player2 : 0");
+        {              
+            // Initialize game notations
+            List<string> gameNotations = new List<string>
+            {
+                "1 Point Match",
+                " Game 1",
+                "Player1 : 0                            Player2 : 0"
+            };
 
             int rowCount = 1;
             bool newRow = true;
@@ -94,11 +101,11 @@ namespace Backgammon.GamePlay
                 }
                 var move = gameData.MoveData[i];
                 Console.WriteLine(i + " : " + move.Move.MovesAsStandardNotation());
-                if (move.Player == BackgammonBoard.Player2)
+                if (move.Player == Player2)
                     rowNotation = rowNotation.PadRight(39);
                 rowNotation += move.Move.MovesAsStandardNotation();
 
-                if (move.Player == BackgammonBoard.Player2 || i == gameData.MoveData.Count - 1)
+                if (move.Player == Player2 || i == gameData.MoveData.Count - 1)
                 {
                     gameNotations.Add(rowNotation);
                     rowCount++;
@@ -114,11 +121,11 @@ namespace Backgammon.GamePlay
                 if (i == gameData.MoveData.Count - 1)
                 {
                     var winningPosition = move.BoardAfter;
-                    var score = Math.Abs(BackgammonBoard.Score(winningPosition, 1));
+                    var score = Math.Abs(Score(winningPosition, 1));
                     rowNotation = rowCount < 10 ? $"  {rowCount})" : $" {rowCount})";
                     Console.WriteLine(rowNotation + ": score" + score);
 
-                    if (move.Player == BackgammonBoard.Player2)
+                    if (move.Player == Player2)
                     {
                         rowNotation = rowNotation.PadRight(39);
                     }
@@ -138,7 +145,16 @@ namespace Backgammon.GamePlay
             }
         }
 
-        public GameData PlayMoneygame(int[]? startingPosition = null, int? player = null)
+        /// <summary>
+        /// Plays a money game with optional starting position and player.
+        /// When you play for money you also consider winning and loosing gammons and backgammons when choosing the best move 
+        /// (which affects the equity of a position). 
+        /// here we have not introduced the cube and jacoby rule yet though.
+        /// </summary>
+        /// <param name="startingPosition">The starting position of the game (optional).</param>
+        /// <param name="player">The starting player (optional).</param>
+        /// <returns>A <see cref="GameData"/> object representing the money game.</returns>
+        public GameData PlayMoneyGame(int[]? startingPosition = null, int? player = null)
         {
             var random = new Random();
 
@@ -184,22 +200,14 @@ namespace Backgammon.GamePlay
                     var minMaxPly = 2;
                     var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly);
                     var ply1Millis = stopwatchMinMax.ElapsedMilliseconds;
-                    var leafsPly1 = _minMaxUtility.LeafCounter;
+                    //var leafsPly1 = _minMaxUtility.LeafCounter;
                     Console.WriteLine($"leafs at ply ({minMaxPly}): " + _minMaxUtility.LeafCounter);
-                    var firstNElements = evaluationsMinMax.Take(3).ToList();
-                    evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly + 1, firstNElements);
+                    //skip ply 3 for fast game
+                    //var firstNElements = evaluationsMinMax.Take(3).ToList();
+                    //evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly + 1, firstNElements);
                     Console.WriteLine($"leafs at ply ({minMaxPly + 1}): " + _minMaxUtility.LeafCounter);
                     Console.WriteLine($"Best Move " + evaluationsMinMax.First().Move.MovesAsStandardNotation());
-                    var prevLeafCount = 0;
-                    /*var maxLeaves = 20000;
-                    while (_minMaxUtility.LeafCounter < maxLeaves && _minMaxUtility.LeafCounter > 1 && _minMaxUtility.LeafCounter > prevLeafCount)
-                    {
-                        var firstNElements = evaluationsMinMax.Take(3).ToList();
-                        prevLeafCount = _minMaxUtility.LeafCounter;
-                        minMaxPly++;
-                        evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, currentPlayer, die1, die2, minMaxPly, firstNElements);
-                        Console.WriteLine($"leafs at ply ({minMaxPly}): " + _minMaxUtility.LeafCounter);
-                    }*/
+                    //var prevLeafCount = 0;
 
                     var ply2Millis = stopwatchMinMax.ElapsedMilliseconds - ply1Millis;
                     stopwatchMinMax.Stop();
@@ -208,17 +216,8 @@ namespace Backgammon.GamePlay
                     {
                         _gameLogger.Information("Board");
                         _gameLogger.Information("\n" + backgammonBoard);
-                        _gameLogger.Information("Pos:\n" + string.Join(", ", backgammonBoard.Position));
-
-                        // var stopWatch = new Stopwatch();
-                        // stopWatch.Start();
-                        // var (quity, scorev) = _minMaxUtility.MinMax(backgammonBoard.Points, currentPlayer, die1, die2, 1, _neuralNetworks);
-
-                        //stopWatch.Stop();
-                        double seconds = (double)stopwatchMinMax.ElapsedTicks / Stopwatch.Frequency;
-                        //_gameLogger.Information("min max eval time: " + seconds);
-                        //_gameLogger.Information("Leaves:" + _minMaxUtility.LeafCounter);
-                        //_gameLogger.Information("average leaf time ms : " + (1000 * seconds / _minMaxUtility.LeafCounter));
+                        _gameLogger.Information("Pos:\n" + string.Join(", ", backgammonBoard.Position));                   
+                        //double seconds = (double)stopwatchMinMax.ElapsedTicks / Stopwatch.Frequency;
                     }
 
                     var bestMove = evaluationsMinMax[0];
@@ -248,7 +247,26 @@ namespace Backgammon.GamePlay
             }
             return gameData;
         }
+        
+        public MoveData? GenerateComputerMove(int[] currentPosition, int die1, int die2, int playerToMove)
+        {
+            const int minMaxPly = 2;
+            var legalMoves = GenerateLegalMovesStatic(currentPosition, die1, die2, playerToMove);
+            if (legalMoves.Count > 0)
+            {
+                var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, playerToMove, die1, die2, minMaxPly);
+                return evaluationsMinMax[0];
+            }
+            return null;
+        }
 
+        /// <summary>
+        /// Trains the neural networks by playing and learning from games.
+        /// </summary>
+        /// <param name="games">The number of games to play and train on.</param>
+        /// <param name="trainFrequency">The frequency of training during the games.</param>
+        /// <param name="epochs">The number of epochs for training.</param>
+        /// <param name="saveFrequency">The frequency of saving the neural networks.</param>
         public void playAndTrain(int games, int trainFrequency, int epochs, int saveFrequency)
         {
             var gameDataTrainLogs = Path.Combine(_logdir, "trainData.log");
@@ -266,9 +284,9 @@ namespace Backgammon.GamePlay
             var trainingGamesData = new List<TrainingData>[nrOfTrainingGames];
             List<(int[], int)> extraTrainPositions = [];
             int saveCounter = 0;
-            int maxExtraSubPositions = 300; // How many extra max subpositions from one game (, can be recursive)
-            int maxExtraMoveCandidates = 3;// How many extra max subpositions from one position (, can be recursive)
-            int maxMovesToPlay = 80; // How many moves to play in a subposition
+            int maxExtraSubPositions = 300; // How many extra max sub positions can be generated from one game (, can be recursive)
+            int maxExtraMoveCandidates = 3; // How many extra max sub positions can be generated from one position (, can be recursive)
+            int maxMovesToPlay = 80;        // How many moves to play in a subposition
             int subPositions = 0;
             // Sometimes we play a moneygame and save it for evaluation in XG
             int moneyGameFrequency = 200;
@@ -288,7 +306,7 @@ namespace Backgammon.GamePlay
                 }
                 if (gameData is null || gameData.IsEmpty())
                 {
-                    Console.WriteLine("Simualate a game" + i);
+                    Console.WriteLine("Simulate a game" + i);
                     gameData = SimulateSingleGame();
                     if (gameData.IsEmpty())
                         Console.WriteLine("Empty GameData" + i);
@@ -391,12 +409,20 @@ namespace Backgammon.GamePlay
 
                 if ((i + 1) % moneyGameFrequency == 0)
                 {
-                    var moneyGame = PlayMoneygame();
+                    var moneyGame = PlayMoneyGame();
                     exportGameToFile(moneyGame);
                 }
             }
         }
 
+        /// <summary>
+        /// Simulates a single backgammon game.
+        /// For training purpose it can be useful to start from different positions , 
+        /// that's why it's possible to play from one of the predefined positions picked ny random
+        /// </summary>
+        /// <param name="startingPosition">The starting position of the game (optional).</param>
+        /// <param name="player">The starting player (optional).</param>
+        /// <returns>A <see cref="GameData"/> object representing the simulated game.</returns>
         public GameData SimulateSingleGame(int[]? startingPosition = null, int? player = null, int maxMoves = 200)
         {
             var startingPositions = BackgammonPositions.BearOffGames;
@@ -426,7 +452,7 @@ namespace Backgammon.GamePlay
             backgammonBoard.Position = currentPosition;
 
             // Deciding the current player. If 'player' is null, choose randomly.
-            int currentPlayer = player ?? (random.NextDouble() > 0.8 ? Player1 : Player2);
+            int currentPlayer = player ?? (random.NextDouble() > 0.5 ? Player1 : Player2);
             Console.WriteLine("Staring Position:\n" + backgammonBoard + "bear off" + BearOffUtility.IsBearOffPosition(currentPosition));
             bool showTheGame = true;
             while (!GameEndedStatic(currentPosition) && !BearOffUtility.IsBearOffPosition(currentPosition) && gameData.MoveData.Count < maxMoves)
@@ -583,14 +609,15 @@ namespace Backgammon.GamePlay
 
 
         /// <summary>
-        /// 
+        /// Generate extra data from a game. This is used to generate extra positions from a game that we can use for training
+        /// instead of always starting from the first position.
         /// </summary>
         /// <param name="gameData"></param>
         /// <param name="maxExtraPos"></param>     How many maximum candidate positions from this game that we will play as a new game
         /// <param name="maxMovesToPlay"></param>  How many maximum candidate positions that we will generate from one position then game 
         /// (taken from the legal candidate moves) 
         /// <returns></returns>
-        public List<(int[], int)> generateExtraData(GameData gameData, int maxExtraPos, int maxMovesToPlay)
+        private List<(int[], int)> generateExtraData(GameData gameData, int maxExtraPos, int maxMovesToPlay)
         {
             List<(int[], int)> extraData = [];
             int moveCount = 0;
@@ -719,7 +746,7 @@ namespace Backgammon.GamePlay
             return extraData;
         }
 
-        //It's not good to be stuck on deuce and one point
+        //It's not good to be stuck on the deuce or the one point so moves that fights for a better anchor is valuable
         private bool IsSplittingOrGoingForBetterAnchor(int[] position, Move move)
         {
             if (move.Player == Player1)

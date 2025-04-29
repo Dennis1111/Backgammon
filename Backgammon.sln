@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Backgammon", "Backgammon\Ba
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backgammon.Tests", "Backgammon.Tests\Backgammon.Tests.csproj", "{F2A8B18D-923A-48BF-AD49-6A5366776926}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backgammon.WebApp", "Backgammon.WebApp\Backgammon.WebApp.csproj", "{F6DB63FA-8977-4655-A8F5-6A1AE391590E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{F2A8B18D-923A-48BF-AD49-6A5366776926}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F2A8B18D-923A-48BF-AD49-6A5366776926}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F2A8B18D-923A-48BF-AD49-6A5366776926}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6DB63FA-8977-4655-A8F5-6A1AE391590E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6DB63FA-8977-4655-A8F5-6A1AE391590E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6DB63FA-8977-4655-A8F5-6A1AE391590E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6DB63FA-8977-4655-A8F5-6A1AE391590E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

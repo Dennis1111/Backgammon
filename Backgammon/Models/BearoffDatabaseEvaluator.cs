@@ -6,7 +6,7 @@ namespace Backgammon.Models
 {
     internal class BearoffDatabaseEvaluator : IBackgammonPositionEvaluator
     {
-        private Dictionary<string, float[]> _bearOffDatabase;
+        private readonly Dictionary<string, float[]> _bearOffDatabase;
         public Dictionary<string, float[]> BearOffDatabase => _bearOffDatabase;
 
         public BearoffDatabaseEvaluator(Dictionary<string, float[]> bearOffDatabase) { 

@@ -32,6 +32,7 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 position = MirrorBoard(position);
             }
+            // For now we only have two different input encoders but plan to optimize that in the future
             switch (positionType)
             {
                 case PositionType.BearOffVs1Point:

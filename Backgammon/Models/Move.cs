@@ -1,6 +1,4 @@
-﻿using NUnit.Framework;
-
-namespace Backgammon.Models
+﻿namespace Backgammon.Models
 {
     public class Move
     {
@@ -11,6 +9,10 @@ namespace Backgammon.Models
         private readonly int _die1;
         private readonly int _die2;
         private readonly int _player;
+
+        // Public properties to expose die1 and die2
+        public int Die1 => _die1;
+        public int Die2 => _die2;
         public int Player => _player;
 
         public Move(int die1, int die2, int player, List<CheckerMove>? checkerMoves = null, bool doubleOffer = false)

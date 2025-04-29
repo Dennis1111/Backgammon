@@ -1,0 +1,28 @@
+﻿@page "/play-game"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+
+<div class="container">
+    <div class="game-container">
+        <!-- Board Component -->
+        <Board />
+    </div>
+</div>
+
+@code {
+    private IJSObjectReference? gameModule;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Console.WriteLine("Loading play-game.js module");
+
+            // Dynamically import your play-game.js module
+            gameModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/playGame.js");
+
+            // Initialize the game
+            await gameModule.InvokeVoidAsync("initializeGame");
+        }
+    }
+}
