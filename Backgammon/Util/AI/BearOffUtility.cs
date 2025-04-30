@@ -8,7 +8,8 @@ namespace Backgammon.Util.AI
 {
     internal class BearOffUtility
     {
-        public static int MaxCheckers = 7;
+        // The maximum number of checkers that can be on the board for a bear-off position
+        public static int MaxCheckers = 6;
 
         public static string ConvertBearOffBoardToString(int[] boardPosition)
         {

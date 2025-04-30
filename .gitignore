@@ -45,7 +45,9 @@ $RECYCLE.BIN/
 .vs/
 
 # Exclude the data folder
-data*/
+# data*/
+# to large file
+Data/neuralnets/bearoff7.json
 
 # Add other common exclusions as needed
 *.log

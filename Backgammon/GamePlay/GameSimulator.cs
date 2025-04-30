@@ -26,7 +26,7 @@ namespace Backgammon.GamePlay
         /// </summary>
         public GameSimulator()
         {
-            string dataPath = Environment.GetEnvironmentVariable("BG_DATA_PATH");
+            string dataPath = GetDataPath();
             // Set up directories
             var modelsDir = Path.Combine(dataPath, "neuralnets");
             _logdir = Path.Combine(dataPath, "logs");
@@ -45,6 +45,18 @@ namespace Backgammon.GamePlay
             _extraGamesLogger = CreateLogger(Path.Combine(_logdir, "ExtraGames.log"));
             _board = new BackgammonBoard();
             _minMaxUtility = new MinMaxUtility(_positionEvaluators);
+        }
+
+        private static string GetDataPath()
+        {
+            var envPath = Environment.GetEnvironmentVariable("BG_DATA_PATH");
+            if (!string.IsNullOrEmpty(envPath)) return envPath;
+
+            var baseDir = AppContext.BaseDirectory;
+            var rootDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..","..")); // back to root folder
+            var dataDir = Path.Combine(rootDir, "Data");
+
+            return dataDir;
         }
 
         private ILogger CreateLogger(string logFilePath)
@@ -149,7 +161,7 @@ namespace Backgammon.GamePlay
         /// Plays a money game with optional starting position and player.
         /// When you play for money you also consider winning and loosing gammons and backgammons when choosing the best move 
         /// (which affects the equity of a position). 
-        /// here we have not introduced the cube and jacoby rule yet though.
+        /// here we have not introduced the cube and Jacoby rule yet though.
         /// </summary>
         /// <param name="startingPosition">The starting position of the game (optional).</param>
         /// <param name="player">The starting player (optional).</param>
