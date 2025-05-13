@@ -1,25 +1,32 @@
 ﻿@using Backgammon.Models
 @using Backgammon.WebApp.Models
 
-<table class="move-table">
-    <thead>
-        <tr>
-            <th>Move</th>
-            <th>Human</th>
-            <th>Computer</th>
-        </tr>
-    </thead>
-    <tbody @ref="tableBodyRef">
-        @foreach (var row in MoveRows)
-        {
+<div class="move-table-wrapper" @ref="tableWrapperRef">
+    <table class="move-table">
+        <colgroup>
+            <col style="width: 20%">
+            <col style="width: 40%">
+            <col style="width: 40%">
+        </colgroup>
+        <thead>
             <tr>
-                <td>@row.Index</td>
-                <td>@row.HumanMove</td>
-                <td>@row.ComputerMove</td>
+                <th>Move</th>
+                <th>Human</th>
+                <th>Computer</th>
             </tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var row in MoveRows)
+            {
+                <tr>
+                    <td>@row.Index</td>
+                    <td>@row.HumanMove</td>
+                    <td>@row.ComputerMove</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
 
 @code {
     [Parameter] public List<Move> Moves { get; set; } = new();
@@ -28,7 +35,7 @@
 
     @inject IJSRuntime JS
 
-    private ElementReference tableBodyRef;
+    private ElementReference tableWrapperRef;
     private IJSObjectReference? scrollModule;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -37,7 +44,7 @@
         {
             scrollModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/moveTable.js");
         }
-        await scrollModule.InvokeVoidAsync("scrollTableBodyToBottom", tableBodyRef);
+        await scrollModule.InvokeVoidAsync("scrollTableBodyToBottom", tableWrapperRef);
     }
 
     private List<MoveRow> BuildMoveTable(List<Move> moves, int humanPlayer)

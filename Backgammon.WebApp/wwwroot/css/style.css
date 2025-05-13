@@ -263,33 +263,23 @@ html, body {
     display: none;
 }
 
+.move-table-wrapper {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
 .move-table {
     width: 100%;
     border-collapse: collapse;
     font-family: sans-serif;
     font-size: 0.9rem;
-    display: block;
 }
 
-.move-table thead {
+.move-table thead th {
     position: sticky;
     top: 0;
     background-color: #f2f2f2;
-    display: table;
-    width: 100%;
-    table-layout: fixed;
-}
-
-.move-table tbody {
-    display: block;
-    max-height: 50vh;
-    overflow-y: auto;
-}
-
-.move-table tr {
-    display: table;
-    width: 100%;
-    table-layout: fixed;
+    z-index: 1;
 }
 
 .move-table th,
