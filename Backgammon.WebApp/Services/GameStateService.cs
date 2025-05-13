@@ -104,9 +104,9 @@ namespace Backgammon.WebApp.Services
                 var dice = getNextDice();
                 Console.WriteLine($"Dice: {Dice[0]} {Dice[1]} - Dice to use: {dice}");
                 int moveCheckerTo = pointId - dice;
-                
-                // Special case when we can't move from the bar in the first move with the selected die we try to use the other one instead
-                if (pointId==BackgammonBoard.OnTheBarP1 && Board[moveCheckerTo]<=-2 && CurrentMove.Count==0 && Dice[0]!=Dice[1])
+
+                // In the first checker move we assume the player want's to move with other dice when the first one can't be used from the selected point
+                if (Board[moveCheckerTo] <= -2 && CurrentMove.Count == 0 && Dice[0] != Dice[1])
                 {
                     if (Dice[0] == dice)
                     {
@@ -294,7 +294,6 @@ namespace Backgammon.WebApp.Services
                     var moveData = _gameSimulator.GenerateComputerMove(Board, Dice[0], Dice[1], CurrentPlayer);
                     if (moveData != null)
                     {
-                        //var move = moveData.Move;
                         Board = moveData.BoardAfter;
                         Console.WriteLine("Computer moved" + moveData.Move.MovesAsStandardNotation());
                         PrintBackgammonBoard(Board);
@@ -316,6 +315,7 @@ namespace Backgammon.WebApp.Services
                     if (IsGameOver)
                     {
                         UpdateGameOverInfoAndScore();
+                        NotifyStateChanged();
                         return;
                     }
 

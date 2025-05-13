@@ -54,8 +54,6 @@
         var tableRow = new MoveRow {};
         for (int i = 0; i < moves.Count; i++)
         {
-            // var row = new MoveRow { Index = index++ };
-
             var move = moves[i];
             if (move.Player == humanPlayer)
                 tableRow.HumanMove = move.MovesAsStandardNotation();

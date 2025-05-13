@@ -82,7 +82,7 @@ html, body {
     flex-direction: column; /* Stack checkers vertically */
     justify-content: flex-start; /* Start from the top for the top bear-off */
     height: 100%; /* Height as per the board */
-    background: #a52a2a; /* Distinct color for the bear-off area */
+    background: green; /* Distinct color for the bear-off area */
     box-sizing: border-box;
     padding: 10px 5px; /* Adjust padding */
     position: relative; /* Positioning context for absolute checker positioning */
