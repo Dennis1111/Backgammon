@@ -1,0 +1,70 @@
+﻿@using Backgammon.Models
+@using Backgammon.WebApp.Models
+
+<table class="move-table">
+    <thead>
+        <tr>
+            <th>Move</th>
+            <th>Human</th>
+            <th>Computer</th>
+        </tr>
+    </thead>
+    <tbody @ref="tableBodyRef">
+        @foreach (var row in MoveRows)
+        {
+            <tr>
+                <td>@row.Index</td>
+                <td>@row.HumanMove</td>
+                <td>@row.ComputerMove</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    [Parameter] public List<Move> Moves { get; set; } = new();
+    const int HumanPlayer = BackgammonBoard.Player1;
+    private List<MoveRow> MoveRows => BuildMoveTable(Moves, HumanPlayer);
+
+    @inject IJSRuntime JS
+
+    private ElementReference tableBodyRef;
+    private IJSObjectReference? scrollModule;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (scrollModule == null)
+        {
+            scrollModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/moveTable.js");
+        }
+        await scrollModule.InvokeVoidAsync("scrollTableBodyToBottom", tableBodyRef);
+    }
+
+    private List<MoveRow> BuildMoveTable(List<Move> moves, int humanPlayer)
+    {
+        var tableRows = new List<MoveRow>();
+        int tableRowIndex = 1;
+        var tableRow = new MoveRow {};
+        for (int i = 0; i < moves.Count; i++)
+        {
+            // var row = new MoveRow { Index = index++ };
+
+            var move = moves[i];
+            if (move.Player == humanPlayer)
+                tableRow.HumanMove = move.MovesAsStandardNotation();
+            else
+                tableRow.ComputerMove = move.MovesAsStandardNotation();
+            tableRow.Index = tableRowIndex;
+
+            if (i < moves.Count - 1 && move.Player != humanPlayer)
+            {
+                tableRows.Add(tableRow);
+                tableRow = new MoveRow();
+                tableRowIndex++;
+            }
+        }
+        tableRows.Add(tableRow);
+      
+        return tableRows;
+    }
+}

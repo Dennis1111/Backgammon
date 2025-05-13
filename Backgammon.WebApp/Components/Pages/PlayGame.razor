@@ -1,28 +1,89 @@
 ﻿@page "/play-game"
 @rendermode InteractiveServer
-@inject IJSRuntime JS
+@inject GameStateService GameState
+@using Backgammon.WebApp.Services
 
 <div class="container">
     <div class="game-container">
-        <!-- Board Component -->
-        <Board />
+        <Board BoardState="@GameState.Board"
+               DiceValues="@GameState.Dice"
+               CurrentPlayer="@GameState.CurrentPlayer"
+               MoveIsComplete="@GameState.MoveIsComplete"
+               IsGameOver="@GameState.IsGameOver"
+               GameOverMessage="@GameState.GameOverMessage"
+               OnPointClicked="HandlePointClick"
+               OnDiceClicked="HandleDiceClick"
+               OnCompleteMoveClicked="HandleCompleteMoveClick"
+               OnStartNewGameClicked="HandleStartNewGameClick"
+               OnUndoMoveRequested="HandleUndoMove" />
     </div>
+    <GamePanel ScorePlayer1="@GameState.ScorePlayer1"
+               ScorePlayer2="@GameState.ScorePlayer2"
+               MovesMade="@GameState.MovesMade" />
+
 </div>
 
 @code {
-    private IJSObjectReference? gameModule;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override void OnInitialized()
     {
-        if (firstRender)
+        GameState.StateChanged += StateHasChanged;
+        Console.WriteLine("OnInitialized called");
+        if (!GameState.IsInitialized)
         {
-            Console.WriteLine("Loading play-game.js module");
-
-            // Dynamically import your play-game.js module
-            gameModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/playGame.js");
-
-            // Initialize the game
-            await gameModule.InvokeVoidAsync("initializeGame");
+            Console.WriteLine("Initializing game state...");
+            GameState.InitializeGame();
         }
+    }
+
+    public void Dispose()
+    {
+        GameState.StateChanged -= StateHasChanged;
+    }
+
+    private void StartNewGame()
+    {
+        Console.WriteLine("Starting a new game...");
+        GameState.InitializeGame();
+    }
+
+    private bool isProcessingClick = false;
+
+    private async void HandlePointClick(int pointId)
+    {
+        if (isProcessingClick)
+        {
+            return;
+        }
+        isProcessingClick = true;
+        await GameState.TryMakeCheckerMove(pointId);
+        await Task.Delay(150); // Simulate some processing time
+        isProcessingClick = false;
+    }
+
+    private async void HandleCompleteMoveClick()
+    {
+        Console.WriteLine($"Complete move clicked for point");
+        GameState.CompleteHumanMove(); // End player turn
+        await Task.Delay(50); // Simulate some processing time
+        await GameState.GenerateComputerMove(); // End player turn
+        Console.WriteLine($"Exit Complete move clicked for point");
+    }
+
+    private async void HandleStartNewGameClick()
+    {
+        Console.WriteLine("Starting New Game!");
+        GameState.InitializeGame();
+        await Task.Delay(50); // Simulate some processing time
+    }
+
+    private void HandleUndoMove()
+    {
+        GameState.RevertLastCheckerMove();
+    }
+
+    // We can only reach this function when human is on turn
+    private void HandleDiceClick(int pointId)
+    {
+        GameState.SwapDiceOrder();        // Let player try moves in alternate order
     }
 }

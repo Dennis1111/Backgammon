@@ -1,36 +1,43 @@
 ﻿namespace Backgammon.Models
 {
-    public class Move
-    {
-        // Initialized to an empty list to ensure it's never null
-        public List<CheckerMove> CheckerMoves { get; private set; } = [];
-
-        public bool DoubleOffer { get; private set; }
-        private readonly int _die1;
-        private readonly int _die2;
-        private readonly int _player;
-
-        // Public properties to expose die1 and die2
-        public int Die1 => _die1;
-        public int Die2 => _die2;
-        public int Player => _player;
-
-        public Move(int die1, int die2, int player, List<CheckerMove>? checkerMoves = null, bool doubleOffer = false)
+        public class Move
         {
-            // Assigns checkerMoves if not null; otherwise, retains the initialized empty list
-            CheckerMoves = checkerMoves ?? new List<CheckerMove>();
-            DoubleOffer = doubleOffer;
-            _die1 = die1;
-            _die2 = die2;
-            _player = player;
-        }
+            // Initialized to an empty list to ensure it's never null
+            public List<CheckerMove> CheckerMoves { get; private set; } = [];
 
-        public Move AddCheckerMove(CheckerMove checkerMove, bool clone = true)
-        {
-            var target = clone ? Clone() : this;
-            target.CheckerMoves.Add(checkerMove);
-            return target;
-        }
+            public bool DoubleOffer { get; private set; }
+            private readonly int _die1;
+            private readonly int _die2;
+            private readonly int _player;
+
+            // Public properties to expose die1 and die2
+            public int Die1 => _die1;
+            public int Die2 => _die2;
+            public int Player => _player;
+
+            public Move(int die1, int die2, int player, List<CheckerMove>? checkerMoves = null, bool doubleOffer = false)
+            {
+                // Assigns checkerMoves if not null; otherwise, retains the initialized empty list
+                CheckerMoves = checkerMoves ?? new List<CheckerMove>();
+                DoubleOffer = doubleOffer;
+                _die1 = die1;
+                _die2 = die2;
+                _player = player;
+            }
+
+            public Move AddCheckerMoveClean(CheckerMove checkerMove)
+            {
+                CheckerMoves.Add(checkerMove);
+                return this;
+            }
+
+            // This code is a bit ugly and should be removed but needs to be tested first
+            public Move AddCheckerMoveOld(CheckerMove checkerMove, bool clone = true)
+            {
+                var target = clone ? Clone() : this;
+                target.CheckerMoves.Add(checkerMove);
+                return target;
+            }
 
         public bool HasCheckerMoves() => CheckerMoves.Count > 0;
 
@@ -61,7 +68,7 @@
             foreach (var move in CheckerMoves)
             {
                 var from = 25 - move.From;
-                var to = move.To == BackgammonBoard.CheckersOffP2 ? BackgammonBoard.CheckersOffP1 :
+                var to = move.To == BackgammonBoard.BearOffP2 ? BackgammonBoard.BearOffP1 :
                     25 - move.To;
                 checkerMovesForNotation.Add(new CheckerMove(from, to, move.IsHit, move.IsBearOff));
             }
@@ -78,8 +85,6 @@
             else
             {
                 var firstCheckerMove = CheckerMoves.First();
-                //var player = (firstCheckerMove.From > firstCheckerMove.To) ? BackgammonBoard.Player1 : BackgammonBoard.Player2;
-
                 var movesForNotation = _player == BackgammonBoard.Player2 ?
                     ConvertPlayer2MovesAsPlayer1() :
                     CheckerMoves;

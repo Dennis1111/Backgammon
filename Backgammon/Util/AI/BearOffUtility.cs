@@ -80,9 +80,9 @@ namespace Backgammon.Util.AI
                 return false;
             }*/
 
-            if (boardPos[BackgammonBoard.CheckersOffP1] < (15 - MaxCheckers))
+            if (boardPos[BackgammonBoard.BearOffP1] < (15 - MaxCheckers))
                 return false;
-            if (-boardPos[BackgammonBoard.CheckersOffP2] < (15 - MaxCheckers))
+            if (-boardPos[BackgammonBoard.BearOffP2] < (15 - MaxCheckers))
                 return false;
             return true;
         }
@@ -193,8 +193,8 @@ namespace Backgammon.Util.AI
                 bearOffPosition[BackgammonBoard.AcePointP2 - i] = -checkers;
             }
 
-            bearOffPosition[BackgammonBoard.CheckersOffP1] = checkersOffP1;
-            bearOffPosition[BackgammonBoard.CheckersOffP2] = -checkersOffP2;
+            bearOffPosition[BackgammonBoard.BearOffP1] = checkersOffP1;
+            bearOffPosition[BackgammonBoard.BearOffP2] = -checkersOffP2;
             return bearOffPosition;
         }
 

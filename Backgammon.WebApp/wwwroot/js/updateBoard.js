@@ -85,7 +85,7 @@ function placeStandingCheckersInBearOff(pointId, numberOfCheckers, player) {
             const checker = document.createElement('div');
             checker.style.width = checkerSize + 'px';
             checker.style.height = (checkerSize * 0.2) + 'px';
-            checker.classList.add('bear-off-checker', player); // Use 'bear-off-checker' class for specific styling
+            checker.classList.add('checker', 'bear-off-checker', player); // Use 'bear-off-checker' class for specific styling
             checker.style.top = `${yOffset}px`; // Stack checkers from the top down
             pointElement.appendChild(checker);
             yOffset += 13; // Increment yOffset for the next checker
@@ -97,7 +97,7 @@ function placeStandingCheckersInBearOff(pointId, numberOfCheckers, player) {
             const checker = document.createElement('div');
             checker.style.width = checkerSize + 'px';
             checker.style.height = (checkerSize * 0.2) + 'px';
-            checker.classList.add('bear-off-checker', player); // Use 'bear-off-checker' class for specific styling
+            checker.classList.add('checker', 'bear-off-checker', player); // Use 'bear-off-checker' class for specific styling
             checker.style.bottom = `${(numberOfCheckers - i - 1) * 13 + yOffset}px`; // Stack checkers from the bottom up
             pointElement.appendChild(checker);
         }
@@ -145,102 +145,6 @@ function showDice(player, diceValues) {
         diceContainer.appendChild(dice);
     });
 }
-
-
-
-/*function showDice(player, diceValues) {
-    const diceContainer = document.querySelector('.dice-container');
-
-    // Adjust the dice container's position based on the player
-    diceContainer.style.right = player === 0 ? '20%' : 'auto';
-    diceContainer.style.left = player === 0 ? 'auto' : '20%';
-
-    // Dice unicode values for each side of the die
-    const diceUnicode = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-
-    // Get the player's dice elements
-    const dicePlayer1 = document.querySelectorAll('.dice-player1');
-    const dicePlayer2 = document.querySelectorAll('.dice-player2');
-
-    // Hide all dice first
-    [...dicePlayer1, ...dicePlayer2].forEach(dice => dice.style.display = 'none');
-
-    // Select the active dice container based on the player
-    const activeDice = player === 0 ? dicePlayer1 : dicePlayer2;
-
-    // Calculate dice size based on window size
-    const diceSize = Math.min(window.innerWidth, window.innerHeight) * 0.1; // Adjust dice size as 10% of the smallest dimension
-
-    // Apply the calculated size to each dice element
-    activeDice.forEach((dice, index) => {
-        if (index < diceValues.length) {
-            const value = diceValues[index];
-            dice.textContent = diceUnicode[value - 1] || ''; // Set the correct Unicode character for the dice value
-            dice.style.display = 'block'; // Show the dice
-            dice.style.fontSize = `${diceSize * 0.6}px`; // Adjust font size to match the dice size (60% of dice size)
-            dice.style.width = `${diceSize}px`; // Set the width based on calculated dice size
-            dice.style.height = `${diceSize}px`; // Set the height based on calculated dice size
-            dice.style.lineHeight = `${diceSize}px`; // Vertically center the dice text within the box
-            dice.style.textAlign = 'center'; // Ensure text is centered horizontally
-        }
-    });
-}*/
-
-/*
-function showDice(player, diceValues) {
-    const diceContainer = document.querySelector('.dice-container');
-    diceContainer.style.right = player === 0 ? '20%' : 'auto';
-    diceContainer.style.left = player === 0 ? 'auto' : '20%';
-
-    const diceUnicode = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-
-    const dicePlayer1 = document.querySelectorAll('.dice-player1');
-    const dicePlayer2 = document.querySelectorAll('.dice-player2');
-
-    // Hide all dice first
-    [...dicePlayer1, ...dicePlayer2].forEach(dice => dice.style.display = 'none');
-
-    const activeDice = player === 0 ? dicePlayer1 : dicePlayer2;
-    activeDice.forEach((dice, index) => {
-        if (index < diceValues.length) {
-            const value = diceValues[index];
-            dice.textContent = diceUnicode[value - 1] || ''; // Ensure valid index
-            dice.style.display = 'block';
-        }
-    });
-}*/
-
-/*function showDice(player, diceValues) {
-    const diceContainer = document.querySelector('.dice-container');
-    diceContainer.style.right = player === 0 ? '20%' : 'auto';
-    diceContainer.style.left = player === 0 ? 'auto' : '20%';
-
-    // Update the container's side based on the player
-
-    // Assuming you have separate dice elements for each player
-    const dicePlayer1 = document.querySelectorAll('.dice-player1');
-    const dicePlayer2 = document.querySelectorAll('.dice-player2');
-
-    // Hide all dice first
-    [...dicePlayer1, ...dicePlayer2].forEach(dice => dice.style.display = 'none');
-
-    // Display dice based on the player and update values
-    if (player === 0) { // Player 1
-        dicePlayer1.forEach((dice, index) => {
-            if (index < diceValues.length) {
-                dice.textContent = diceValues[index]; // Update value
-                dice.style.display = 'block'; // Show dice
-            }
-        });
-    } else { // Player 2
-        dicePlayer2.forEach((dice, index) => {
-            if (index < diceValues.length) {
-                dice.textContent = diceValues[index]; // Update value
-                dice.style.display = 'block'; // Show dice
-            }
-        });
-    }
-}*/
 
 export function adjustCheckerSize() {
     const board = document.querySelector('.board');

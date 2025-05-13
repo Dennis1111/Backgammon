@@ -427,8 +427,8 @@ namespace Backgammon.Util.NeuralEncoding
             float[] neuralInputs = new float[1];
             string[] labels = { "BorneOffDifference" };
 
-            int p1BorneOff = Math.Max(board[CheckersOffP1], 0);
-            int p2BorneOff = Math.Max(-board[CheckersOffP2], 0);
+            int p1BorneOff = Math.Max(board[BearOffP1], 0);
+            int p2BorneOff = Math.Max(-board[BearOffP2], 0);
             int difference = p1BorneOff - p2BorneOff;
 
             neuralInputs[0] = ScaleToRangeMinus1Plus1(difference, -MaxDifference, MaxDifference);
@@ -438,8 +438,8 @@ namespace Backgammon.Util.NeuralEncoding
 
         public static (float[] neuralInputs, string[] labels) EncodeBorneOffNeuralInputsSparse(int[] board)
         {
-            int p1BorneOff = Math.Max(board[CheckersOffP1], 0);
-            int p2BorneOff = Math.Max(-board[CheckersOffP2], 0);
+            int p1BorneOff = Math.Max(board[BearOffP1], 0);
+            int p2BorneOff = Math.Max(-board[BearOffP2], 0);
             var p1BorneOffScaled = ScaleToRangeMinus1Plus1(p1BorneOff, 0f, 15f);
             var p2BorneOffScaled = ScaleToRangeMinus1Plus1(p2BorneOff, 0f, 15f);
             string[] labels = { "BorneOffP1", "BorneOffP2" };
@@ -895,8 +895,8 @@ namespace Backgammon.Util.NeuralEncoding
             }
 
             // Retrieve the number of borne-off checkers for each player
-            int p1BorneOff = Math.Max(position[CheckersOffP1], 0);
-            int p2BorneOff = Math.Max(-position[CheckersOffP2], 0); // Correction for negative representation
+            int p1BorneOff = Math.Max(position[BearOffP1], 0);
+            int p2BorneOff = Math.Max(-position[BearOffP2], 0); // Correction for negative representation
 
             int difference = p1BorneOff - p2BorneOff;
 

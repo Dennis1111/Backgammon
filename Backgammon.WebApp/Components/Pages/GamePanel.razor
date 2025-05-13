@@ -1,0 +1,24 @@
+﻿@using Backgammon.Models
+
+<div class="game-panel">
+    <h3>Game Panel</h3>
+    <div>
+        <p><strong>Current Turn:</strong> @CurrentTurn</p>
+        <p><strong>Score:</strong></p>
+        <ul>
+            <li>Player : @ScorePlayer1</li>
+            <li>AI     : @ScorePlayer2</li>
+        </ul>
+        <p><strong>Moves Made:</strong></p>
+
+        <!-- Use the MoveHistoryTable as a subcomponent -->
+        <MoveHistoryTable Moves=MovesMade/>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string CurrentTurn { get; set; } = "Player 1";
+    [Parameter] public int ScorePlayer1 { get; set; } = 0;
+    [Parameter] public int ScorePlayer2 { get; set; } = 0;
+    [Parameter] public List<Move> MovesMade { get; set; } = new();
+}

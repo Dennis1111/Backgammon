@@ -1,46 +1,124 @@
-﻿<div class="board">
+﻿@inject IJSRuntime JS
+
+<div class="board">
+    <div class="game-over-message @(IsGameOver ? "" : "hidden")">
+        <p>@GameOverMessage</p>
+        <button @onclick="HandleStartNextGameClick">Next Game</button>
+    </div>
+
+    <button class="complete-move-button @(MoveIsComplete && !IsGameOver ? "" : "hidden")"
+            @onclick="HandleCompleteMoveClick">
+        Complete Move
+    </button>
+    
     <!-- Dice area -->
-    <div class="dice-container hidden">
+    <div class="dice-container hidden" @onclick="() => HandleDiceClick()">
         <div class="dice-player1 dice-grid" id="dice1-player1" data-value="0"></div>
         <div class="dice-player1 dice-grid" id="dice2-player1" data-value="0"></div>
         <div class="dice-player2 dice-grid" id="dice1-player2" data-value="0"></div>
         <div class="dice-player2 dice-grid" id="dice2-player2" data-value="0"></div>
     </div>
+
     <div class="upper-half">
-        <div class="bear-off bear-off-top" id="point-27"></div> <!-- Bear-off zone for Player 1 -->
-        <div class="point light" id="point-24">
-            <!-- <div class="checker white"></div> - Example of a white checker in the bear-off area -->
-        </div>
-        <div class="point dark" id="point-23"></div>
-        <div class="point light" id="point-22"></div>
-        <div class="point dark" id="point-21"></div>
-        <div class="point light" id="point-20"></div>
-        <div class="point dark" id="point-19"></div>
-        <!-- Bar for upper half -->
-        <div class="point bar" id="point-25"></div>
-        <div class="point light" id="point-18"></div>
-        <div class="point dark" id="point-17"></div>
-        <div class="point light" id="point-16"></div>
-        <div class="point dark" id="point-15"></div>
-        <div class="point light" id="point-14"></div>
-        <div class="point dark" id="point-13"></div>
-        <div class="bear-off bear-off-top"></div> <!-- Bear-off zone for Player 1 -->
+        <div class="bear-off bear-off-top" id="point-27" @onclick="() => HandleClick(27)"></div>
+
+        @for (int i = 24; i >= 19; i--)
+        {
+            var pointId = i;//Razor fix for HandleClick otherwise all will bind to 18
+            <div class="point @(i % 2 == 0 ? "light" : "dark")"
+                 id="point-@i"
+                 @onclick="() => HandleClick(pointId)">
+            </div>
+        }
+
+        <div class="point bar" id="point-25" @onclick="() => HandleClick(25)"></div>
+
+        @for (int i = 18; i >= 13; i--)
+        {
+            var pointId = i;
+            <div class="point @(i % 2 == 0 ? "light" : "dark")"
+                 id="point-@i"
+                 @onclick="() => HandleClick(pointId)">
+            </div>
+        }
+
+        <div class="bear-off bear-off-top"></div>
     </div>
+
     <div class="lower-half">
-        <div class="bear-off bear-off-bottom" id="point-26"></div> <!-- Bear-off zone for Player 2 -->
-        <div class="point dark" id="point-1"></div>
-        <div class="point light" id="point-2"></div>
-        <div class="point dark" id="point-3"></div>
-        <div class="point light" id="point-4"></div>
-        <div class="point dark" id="point-5"></div>
-        <div class="point light" id="point-6"></div>
-        <div class="point bar" id="point-0"></div>
-        <div class="point dark" id="point-7"></div>
-        <div class="point light" id="point-8"></div>
-        <div class="point dark" id="point-9"></div>
-        <div class="point light" id="point-10"></div>
-        <div class="point dark" id="point-11"></div>
-        <div class="point light" id="point-12"></div>
+        <div class="bear-off bear-off-bottom" id="point-26" @onclick="() => HandleClick(26)"></div>
+
+        @for (int i = 1; i <= 6; i++)
+        {
+            var pointId = i;
+            <div class="point @(i % 2 == 0 ? "light" : "dark")"
+                 id="point-@i"
+                 @onclick="() => HandleClick(pointId)">
+            </div>
+        }
+
+        <div class="point bar" id="point-0" @onclick="() => HandleClick(0)"></div>
+
+        @for (int i = 7; i <= 12; i++)
+        {
+            var pointId = i;
+            <div class="point @(i % 2 == 0 ? "light" : "dark")"
+                 id="point-@i"
+                 @onclick="() => HandleClick(pointId)">
+            </div>
+        }
+
         <div class="bear-off bear-off-bottom"></div>
     </div>
 </div>
+
+@code {
+    [Parameter] public int[] BoardState { get; set; } = new int[28];
+    [Parameter] public int[] DiceValues { get; set; } = new int[2];
+    [Parameter] public int CurrentPlayer { get; set; } = 0;
+    [Parameter] public bool MoveIsComplete { get; set; } = false;
+    [Parameter] public bool IsGameOver { get; set; } = false;
+    [Parameter] public string GameOverMessage { get; set; } = "Hi";
+    [Parameter] public EventCallback<int> OnPointClicked { get; set; }
+    [Parameter] public EventCallback<int> OnDiceClicked { get; set; }
+    [Parameter] public EventCallback<int> OnCompleteMoveClicked { get; set; }
+    [Parameter] public EventCallback<int> OnStartNewGameClicked { get; set; }
+    [Parameter] public EventCallback OnUndoMoveRequested { get; set; }
+        
+    private Task HandleClick(int pointId) => OnPointClicked.InvokeAsync(pointId);
+    private Task HandleDiceClick() => OnDiceClicked.InvokeAsync();
+    private Task HandleCompleteMoveClick() => OnCompleteMoveClicked.InvokeAsync();
+    private Task HandleStartNextGameClick() => OnStartNewGameClicked.InvokeAsync();
+    
+    private IJSObjectReference? gameModule;
+    private IJSObjectReference? keyboardModule;
+    private DotNetObjectReference<Board>? dotNetRef;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            gameModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/updateBoard.js");
+            keyboardModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/keyboard.js");
+            dotNetRef = DotNetObjectReference.Create(this);
+            await keyboardModule.InvokeVoidAsync("registerUndoShortcut", DotNetObjectReference.Create(this));
+        }
+
+        if (gameModule is not null)
+        {
+            await gameModule.InvokeVoidAsync("updateBoard", BoardState, DiceValues[0], DiceValues[1], CurrentPlayer);
+                      
+        }
+    }
+
+    [JSInvokable]
+    public async Task UndoMoveFromJs()
+    {
+        Console.WriteLine("Ctrl+Z pressed");
+        await OnUndoMoveRequested.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+    }
+}

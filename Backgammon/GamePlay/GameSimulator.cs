@@ -14,7 +14,7 @@ namespace Backgammon.GamePlay
     public class GameSimulator
     {
         private readonly ILogger _gameLogger; // Custom logger for game simulation
-        private readonly ILogger _moneyGameLogger; // Custom logger for game simulation
+        //private readonly ILogger _moneyGameLogger; // Custom logger for game simulation
         private readonly ILogger _extraGamesLogger; // Custom logger for extra game positions
         private readonly string _logdir;
         private readonly BackgammonBoard _board;
@@ -41,7 +41,7 @@ namespace Backgammon.GamePlay
 
             // Initialize other components
             _gameLogger = CreateLogger(Path.Combine(_logdir, "games.log"));
-            _moneyGameLogger = CreateLogger(Path.Combine(_logdir, "moneygames.log"));
+            //_moneyGameLogger = CreateLogger(Path.Combine(_logdir, "moneygames.log"));
             _extraGamesLogger = CreateLogger(Path.Combine(_logdir, "ExtraGames.log"));
             _board = new BackgammonBoard();
             _minMaxUtility = new MinMaxUtility(_positionEvaluators);
@@ -267,6 +267,9 @@ namespace Backgammon.GamePlay
             if (legalMoves.Count > 0)
             {
                 var evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, playerToMove, die1, die2, minMaxPly);
+                var firstNElements = evaluationsMinMax.Take(3).ToList();
+                evaluationsMinMax = _minMaxUtility.EvaluateMoveCandidates(currentPosition, playerToMove, die1, die2, minMaxPly + 1, firstNElements);
+
                 return evaluationsMinMax[0];
             }
             return null;

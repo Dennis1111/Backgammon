@@ -1,6 +1,5 @@
 ﻿using static Backgammon.Util.NeuralEncoding.BoardToNeuralInputsEncoder;
 using static Backgammon.Models.BackgammonBoard;
-using Backgammon.Models;
 
 namespace Backgammon.Util.NeuralEncoding
 {

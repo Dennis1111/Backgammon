@@ -1,79 +1,77 @@
-html, body {
-    height: 100%;
-    margin: 0;
-    background: grey;
-}
-
-:root {
-    /* Define dice size relative to the board's width, adjust as necessary */
-    --dice-size: 5vw;
-}
-
-.container {
-    display: flex;
-    gap: 2rem; /* Optional spacing between panel and board */
-}
-
-.game-panel {
-    width: 50vw;
-    min-width: 400px;
-}
-
-.game-container {
-    flex-grow: 1;
-    display: flex; /* Changed to flex to better control the layout */
-    flex-direction: column; /* Stack children vertically */
-    justify-content: flex-start; /* Center children vertically */
-    align-items: center; /* Center children horizontally */
-    height: 100%; /* Take full height of the viewport */
-    border: 2px solid yellow;
+﻿.board {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr); /* 12 points + 2 bars */
+    grid-template-rows: repeat(2, 1fr); /* Upper and lower halves */
+    gap: 5px;
     width: 100%;
-    max-width: 100%;
-}
-
-.board {
+    height: auto;
+    aspect-ratio: 2 / 1; /* Maintain board aspect ratio */
     position: relative;
-    margin-top: 5px;
-    width: 45vw;
-    background: green;
+    background-color: #f5deb3; /* Light tan for the board */
+    border: 2px solid #8b4513; /* Dark brown border */
+}
+
+.point {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
-    padding: 10px;
-    box-sizing: border-box;
+    flex-direction: column-reverse; 
+    justify-content: flex-start;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    border: 1px solid #8b4513; 
 }
 
-.game-over-message {
+.point.dark::before {
+    background-color: red; 
+}
+
+.point.light::before {
+    background-color: white; 
+}
+
+.point::before {
+    content: " ";
+    display: block;
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10;
-    background-color: rgba(0, 0, 0, 0.8); /* semi-transparent black */
-    color: white;
-    padding: 2rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    min-width: 200px;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    clip-path: polygon(10% 0%, 90% 0%, 50% 90%);
 }
 
-.game-over-message button {
-    margin-top: 1rem;
+.lower-half .point::before {
+    clip-path: polygon(50% 10%, 10% 100%, 90% 100%);
 }
 
-.complete-move-button {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    border-radius: 5px;
-    transform: translate(-50%, -50%);
-    z-index: 10;
+.checker {
+    width: 80%; /* Checker size relative to the point */
+    height: auto;
+    aspect-ratio: 1 / 1; /* Make checkers circular */
+    border-radius: 50%;
+    margin-bottom: 2px; /* Space between stacked checkers */
+    background-color: var(--checker-color);
 }
 
+.bear-off-checker {
+    position: absolute; /* Position checkers absolutely within their parent bear-off */
+    width: 40px; /* Adjusted width for standing appearance */
+    height: 10px; /* Reduced height to simulate standing on edge */
+    margin: 1px 0; /* Space between checkers */
+    border-radius: 5px; /* Soften the edges for a more realistic look */
+    transform: rotate(0deg); /* Optional: rotate if you want them to appear horizontally */
+    background-color: var(--checker-color);
+}
 
+.checker.white {
+    background-color: white;
+    border: 1px solid black;
+}
 
-.game-controls {
-    text-align: center; /* Center-align controls */
+.checker.black {
+    background-color: black;
+    border: 1px solid white;
 }
 
 .bear-off {
@@ -93,77 +91,18 @@ html, body {
     justify-content: flex-end; /* Start from the bottom for the bottom bear-off */
 }
 
-.bear-off-checker {
-    position: absolute; /* Position checkers absolutely within their parent bear-off */
-    width: 40px; /* Adjusted width for standing appearance */
-    height: 10px; /* Reduced height to simulate standing on edge */
-    margin: 1px 0; /* Space between checkers */
-    border-radius: 5px; /* Soften the edges for a more realistic look */
-    transform: rotate(0deg); /* Optional: rotate if you want them to appear horizontally */
-}
-
-/* Color classes for checkers */
-.checker.white, .bear-off-checker.white {
-    background-color: #fff; /* White checkers */
-}
-
-.checker.black, .bear-off-checker.black {
-    background-color: #000; /* Black checkers */
-}
-
-.upper-half, .lower-half {
-    display: flex;
-    width: 100%;
-}
-
 .bar {
     width: 8%; /* Adjust based on your design */
-    background: Green; /* Bar color */
+    background: green; /* Bar color */
     display: flex;
     justify-content: center;
     align-items: center;
     border: 2px solid black;
 }
 
-.point {
-    flex:1;
-    /*width: 1;*/
-    background: Green;
-    padding-bottom: 46.875%;
-    position: relative;
-}
-.point.dark::before {
-    background-color: Red; /* Dark triangles */
-}
-.point.light::before {
-    background-color: White; /* Light triangles */
-    /* background: #f4a460;*/
-}
-
-.point::before {
-    content: " "; /* Ensure there's a space between quotes */
-    display: block;
-    position: absolute;
+.upper-half, .lower-half {
+    display: flex;
     width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-    clip-path: polygon(10% 0%, 90% 0%, 50% 90%);
-}
-
-.lower-half .point::before {
-    clip-path: polygon(50% 10%, 10% 100%, 90% 100%);
-}
-
-.checker {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid #000;
-    position: absolute;
-    bottom: 10px;
-    left: 50%; /* Center horizontally */
-    transform: translateX(-50%); /* Offset by half of its own width to truly center */
 }
 
 .checker.player1 {
@@ -259,30 +198,42 @@ html, body {
     background-color: none; /* Color for player 2's dice */
 }
 
+.greyed-out {
+    opacity: 0.4;
+    cursor: pointer;
+}
+
+
 .hidden {
     display: none;
 }
 
 .move-table {
     width: 100%;
+    max-height: 40vh;
+    overflow-y: auto;
+    display: block;
     border-collapse: collapse;
     font-family: sans-serif;
     font-size: 0.9rem;
-    display: block;
 }
 
 .move-table thead {
     position: sticky;
     top: 0;
     background-color: #f2f2f2;
-    display: table;
-    width: 100%;
-    table-layout: fixed;
+}
+
+.move-table th, .move-table td {
+    border: 1px solid #ccc;
+    padding: 8px 10px;
+    text-align: left;
+    word-break: break-word; /* Ensure long move notation wraps */
 }
 
 .move-table tbody {
     display: block;
-    max-height: 50vh;
+    max-height: 30vh;
     overflow-y: auto;
 }
 
@@ -290,12 +241,4 @@ html, body {
     display: table;
     width: 100%;
     table-layout: fixed;
-}
-
-.move-table th,
-.move-table td {
-    border: 1px solid #ccc;
-    padding: 8px 10px;
-    text-align: left;
-    word-break: break-word;
 }
