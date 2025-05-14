@@ -106,7 +106,8 @@ namespace Backgammon.WebApp.Services
                 int moveCheckerTo = pointId - dice;
 
                 // In the first checker move we assume the player want's to move with other dice when the first one can't be used from the selected point
-                if (Board[moveCheckerTo] <= -2 && CurrentMove.Count == 0 && Dice[0] != Dice[1])
+                // Should use predicates instead of hardcoding the values
+                if (moveCheckerTo >=1 && Board[moveCheckerTo] <= -2 && CurrentMove.Count == 0 && Dice[0] != Dice[1])
                 {
                     if (Dice[0] == dice)
                     {
