@@ -6,7 +6,7 @@ This repository contains a multi-project solution for Backgammon, including:
 - A test project for validation
 - A web application for playing against a computer opponent
 
----
+------------------------------
 
 ## Project Overview
 
@@ -43,6 +43,7 @@ It includes unit tests for some of the most complex functions and neural network
 ### 3. Backgammon.WebApp
 The web application allows users to play Backgammon against a computer opponent.
 It features an interactive UI built with Blazor and a backend powered by .NET 9.
+
 To play vs AI:
 1. cd Backgammon.WebApp
 2. dotnet run
