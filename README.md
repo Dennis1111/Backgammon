@@ -43,10 +43,7 @@ It includes unit tests for some of the most complex functions and neural network
 ### 3. Backgammon.WebApp
 The web application allows users to play Backgammon against a computer opponent.
 It features an interactive UI built with Blazor and a backend powered by .NET 9.
-
-⚠️ Early in development – functionality is currently partial.
-
-Key features:
-
-Play Backgammon in a browser against AI
-Watch a game where computer plays against itself
+To play vs AI:
+1. cd Backgammon.WebApp
+2. dotnet run
+3. visit http://localhost:5233/play-game in browser
