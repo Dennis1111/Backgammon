@@ -7,13 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Skip api solution
-//builder.Services.AddControllers();
-
 // Add your game state service or other dependencies
 builder.Services.AddScoped<GameStateService>();
-// Add GameStateService as Singleton
-//builder.Services.AddSingleton<GameStateService>();
 
 var app = builder.Build();
 
@@ -34,5 +29,4 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// app.MapControllers();
 app.Run();
