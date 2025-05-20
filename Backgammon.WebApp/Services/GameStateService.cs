@@ -38,12 +38,11 @@ namespace Backgammon.WebApp.Services
             //    return;
 
             Board = new BackgammonBoard().Position;
-            //Board = [0, -2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4, -4, -4, -1, 0, 0, 0, 7, 0];
+            // Board = [0, -1, 0, 2, 0, 2, 2, 0, 0, 0, 0, 2, 1, 2, 0, 1, 1, 0, 1, 0, 0, 1, -3, -3, -7, 0 , 0, -1];
             MoveIsComplete = false;
             IsGameOver = false;
             MovesMade = [];
             CurrentMove = [];
-            //MoveIsComplete = false;
             Dice = _diceManager.FirstRoll();
             if (Dice[0] > Dice[1])
             {
@@ -87,7 +86,11 @@ namespace Backgammon.WebApp.Services
 
                 if (CurrentMove.Count == 0)
                 {
-                    ValidMoves = BackgammonBoard.GenerateLegalMovesStatic(Board, Dice[0], Dice[1], CurrentPlayer);
+                    Console.WriteLine("Gen legal moves first die" + Dice[0]);
+                    PrintBackgammonBoard(Board);
+
+                    ValidMoves = BackgammonBoard.GenerateLegalMovesStatic(Board, Dice[0], Dice[1], CurrentPlayer, removeDuplicates: false);
+                    Console.WriteLine($"ValidMoves: {ValidMoves.Count} - CurrentPlayer: {CurrentPlayer} - HumanTurn: {HumanTurn} - MoveIsComplete: {MoveIsComplete} - Dice: {Dice[0]} {Dice[1]}");
                 }
 
                 // This should be change to add an empty move and change player turn though perhaps this function should ony be called when you can make a move
@@ -127,9 +130,12 @@ namespace Backgammon.WebApp.Services
                     bearingOff = true;
                 }
 
+                Console.WriteLine($"CurrentMove: {CurrentMove}");
                 var candidate = new CheckerMove(pointId, moveCheckerTo);
+                Console.WriteLine($"CheckerMove: {candidate}");
+
                 bool isValidMove = BackgammonBoard.isValidCheckerMove([.. ValidMoves.Select(item => item.move)], 
-                    [.. CurrentMove.Select(item => item.CheckerMove)], 
+                    [.. CurrentMove.Select(item => item.CheckerMove)],
                     candidate);
                 
                 if (!isValidMove)

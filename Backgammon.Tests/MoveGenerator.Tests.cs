@@ -94,14 +94,34 @@ namespace Backgammon.Tests
         [Test]
         public void TestRolling63FromTheBarP21Hit()
         {   
-            //Had a bug in the move genarator where the hitting play was missing
+            //Had a bug in the move generator where the hitting play was missing
             int[] position = [-1, -2, 7, 4, 1, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0, -2, -3, -3, -2, 0, 3, 0];
             var die1 = 3;
             var die2 = 6;
             var moveCandidates = GenerateLegalMovesStatic(position, die1, die2, Player2);
 
             var annotation = moveCandidates.First().move.MovesAsStandardNotation();
-            Assert.That(moveCandidates.Count, Is.EqualTo(5), $"Excpected 1 posible move, got({moveCandidates.Count})");
+            Assert.That(moveCandidates.Count, Is.EqualTo(5), $"Expected 1 possible move, got({moveCandidates.Count})");
+        }   
+
+
+        [Test]
+        public void TestRemoveDuplicates()
+        {
+            //Had a bug in the move generator where the hitting play was missing
+            int[] position = [0, -1, 0, 2, 0, 2, 2, 0, 0, 0, 0, 2, 1, 2, 0, 1, 1, 0, 1, 0, 0, 1, -3, -3, -7, 0, 0, -1];
+            
+            var die1 = 6;
+            var die2 = 3;
+            var moveCandidates = GenerateLegalMovesStatic(position, die1, die2, Player1, true);
+            foreach(var cand in moveCandidates)
+            {
+                Console.WriteLine(cand.move.MovesAsStandardNotation());
+            }
+            var annotation = moveCandidates.First().move.MovesAsStandardNotation();
+            Assert.That(moveCandidates.Count, Is.EqualTo(57), $"Expected 1 possible move, got({moveCandidates.Count})");
+            var allMoveCandidates = GenerateLegalMovesStatic(position, die1, die2, Player1, false);
+            Assert.That(allMoveCandidates.Count, Is.EqualTo(66), $"Expected 1 possible move, got({allMoveCandidates.Count})");
         }
     }
 }

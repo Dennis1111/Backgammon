@@ -12,7 +12,7 @@ This repository contains a multi-project solution for Backgammon, including:
 
 ### 1. Backgammon Console App
 
-The console application is designed to train and simulate Backgammon games. It uses advanced algorithms to learn and improve gameplay strategies over time.
+The console application is designed to train and simulate Backgammon games.
 
 **Key features:**
 
@@ -27,9 +27,9 @@ dotnet run
 
 **AI**
 
-The backgammon-bot uses reinforcement learning with neural networks to learn the game.  
-A variant of **NNUE** (used in top chess engines like Stockfish) is being implemented.  
-In chess, few inputs change per move, so the network doesn't need full recomputation.  
+The backgammon-bot uses reinforcement learning with neural networks to learn the game.
+A variant of NNUE (used in top chess engines like Stockfish) is being implemented.  
+In chess, few inputs change per move, so the network doesn't need full recomputation.
 Backgammon has more input changes, but partial optimization is still possible.
 
 - Neural networks run on the CPU with SIMD instructions for fast evaluation

@@ -52,6 +52,73 @@ namespace Backgammon.Models
             ResetBoard();
         }
 
+        public static string BoardAsString(int[] position, int player, int die1, int die2)
+        {
+            var (pipCountP1, pipCountP2) = PipCountStatic(position);
+            var boardStr = new StringBuilder();
+
+            // Create the top half of the board
+            for (int row = 0; row < 6; row++)
+            {
+                if (row == 1)
+                    boardStr.Append(new string('-', 20)).Append("\n");
+
+                for (int i = 0; i < 12; i++)
+                {
+                    boardStr.Append(FormatPoint(position, 13 + i, row));
+                    if (i == 5)
+                    {
+                        boardStr.Append("|").Append(FormatPoint(position, OnTheBarP1, row)).Append("|");
+                    }
+                    if (i == 11)
+                    {
+                        boardStr.Append("|");
+                    }
+                }
+
+                if (row == 0)
+                    boardStr.Append("pips:").Append(pipCountP2);
+                if (row == 1)
+                    boardStr.Append("off:").Append(-position[BearOffP2]);
+
+                if (row == 4 && player == Player2)
+                    boardStr.Append("rolled: ").Append(die1).Append(die2);
+                boardStr.Append("\n");
+            }
+
+            boardStr.Append(new string('-', 20)).Append("\n");
+
+            // Create the bottom half of the board
+            for (int row = 5; row >= 0; row--)
+            {
+                if (row == 0)
+                    boardStr.Append(new string('-', 20)).Append("\n");
+                for (int i = 0; i < 12; i++)
+                {
+                    boardStr.Append(FormatPoint(position, 12 - i, row));
+                    if (i == 5)
+                    {
+                        boardStr.Append("|").Append(FormatPoint(position, OnTheBarP2, row)).Append("|");
+                    }
+                    if (i == 11)
+                    {
+                        boardStr.Append("|");
+                    }
+                }
+
+                if (row == 4 && player == Player1)
+                    boardStr.Append("rolled: ").Append(die1).Append(die2);
+
+                if (row == 0)
+                    boardStr.Append("pips:").Append(pipCountP1);
+                if (row == 1)
+                    boardStr.Append("off:").Append(position[BearOffP1]);
+                boardStr.Append("\n");
+            }
+
+            return boardStr.ToString();
+        }
+
         public override string ToString()
         {
             var (pipCountP1, pipCountP2) = this.PipCount();
@@ -121,7 +188,12 @@ namespace Backgammon.Models
 
         private string FormatPoint(int point, int row)
         {
-            int numCheckers = Position[point];
+            return FormatPoint(Position, point, row);
+        }
+
+        private static string FormatPoint(int[] pos, int point, int row)
+        {
+            int numCheckers = pos[point];
             if (row == 0)
             {
                 if (Math.Abs(numCheckers) > 0)
@@ -299,11 +371,6 @@ namespace Backgammon.Models
         // Static method to check if a game has ended given a points array
         public static bool GameEndedStatic(int[] position)
         {
-            // Assuming points[CheckersOffP1] counts up for Player 1 and 
-            // points[CheckersOffP2] counts up for Player 2, adjust the logic if it's different
-            //Console.WriteLine(string.Join(", ", points));
-            //Console.WriteLine("p1 off" + points[CheckersOffP1]);
-            //Console.WriteLine("p2 off" + points[CheckersOffP2]);
             return position[BearOffP1] == 15 || position[BearOffP2] == -15;
         }
 
@@ -644,6 +711,8 @@ namespace Backgammon.Models
         /// <returns></returns>
         private static List<(CheckerMove move, int[] board, int searchFrom)> GenerateLegalCheckerMoves(int[] position, int die, int player, int searchFrom = 1)
         {
+            //Console.WriteLine("Gen checkers moves: with die: " + die + " from" + searchFrom);
+            //Console.WriteLine(BoardAsString(position, player, 0, 0));
             var movesAndBoards = new List<(CheckerMove move, int[] board, int searchFrom)>();
             if (AnyCheckersOnTheBar(position, player))
             {
@@ -658,7 +727,8 @@ namespace Backgammon.Models
             else
             {
                 bool isBearOffAllowed = IsBearOffAllowed(position, player);
-                // When the bearoff is not allowed we can't move checkers from the Acepoint so we only need to scan 23 points (when not on the bar)
+                // When the bear off is not allowed we can't move checkers from the Acepoint (that would bear off a checker)
+                // so we only need to scan 23 points (when not on the bar)
                 int searchTo = isBearOffAllowed ? 24 : 23;
 
                 for (int point = searchFrom; point <= searchTo; point++)
@@ -677,6 +747,7 @@ namespace Backgammon.Models
                         {
                             (move, board) = MoveChecker(position, pointFrom, die, player);
                         }
+                        //Console.WriteLine("Adding gen legal checkerMove: " + move.ToString());
                         movesAndBoards.Add((move, board, point));
                     }
                 }
@@ -684,21 +755,23 @@ namespace Backgammon.Models
             return movesAndBoards;
         }
 
-
         /// <summary>
         /// From a gives position and list of dies find all Legal Moves for the player that is to move
-        /// If N moves is possible to do it's not allowed to do M moves where N > M with some possible exceptions in the bearoff
-        /// (as an example with one remaing checker on the 6 point and rolling 16 Both 6/off and 6/5 5/off is allowed)
-        ///         /// 
+        /// If N moves is possible to do it's not allowed to do M moves where N > M with some possible exceptions in the bear off
+        /// (as an example with one remaining checker on the 6 point and rolling 16 Both 6/off and 6/5 5/off is allowed)
         /// </summary>
         /// <param name="movesWithBoards"></param>
         /// <param name="dies"></param>
         /// <param name="player"></param>
-        /// <param name="incSearchFrom">when true If previous dice was used to move from point n, then for the next dice searh from n+1 </param>
+        /// <param name="incSearchFrom">
+        /// When true we will not make two checker moves from the same point
+        /// This is useful since if we calls the function with die1, die2 and then with die2, die1 
+        /// </param>
         /// <returns>All the legal moves and true if it was possible to make a move with all dies</returns>
         private static (List<(Move move, int[] board, int searchFrom)>, bool) GenerateLegalMovesHelper(
            List<(Move move, int[] board, int searchFrom)> movesWithBoards, List<int> dies, int player, bool incSearchFrom = false)
         {
+
             List<(Move move, int[] board, int searchFrom)> incompleteMoves = new List<(Move move, int[] board, int searchFrom)>();
             while (dies.Count > 0)
             {
@@ -710,6 +783,8 @@ namespace Backgammon.Models
                 {
                     var (tempMove, tempBoard, searchFrom) = moveWithBoard;
                     
+                    //Console.WriteLine("tempBoard: " + BoardAsString(tempBoard, player, die, die));
+                    //Console.WriteLine("tempMove: " + tempMove);
                     if (dies.Count == 0 && incSearchFrom)
                     {
                         var moveFrom = tempMove.CheckerMoves.Last().From;
@@ -719,6 +794,8 @@ namespace Backgammon.Models
                             searchFrom += 1;
                         }
                     }
+                    //Console.WriteLine("tempMove: " + tempMove+ "searchFrom: " + searchFrom);
+                    //int nextSearchFrom = 1;
                     var checkerMovesAndBoards = GenerateLegalCheckerMoves(tempBoard, die, player, searchFrom);
 
                     if (checkerMovesAndBoards.Count > 0)
@@ -726,6 +803,7 @@ namespace Backgammon.Models
                         foreach (var (checkerMove, board, newSearchFrom) in checkerMovesAndBoards)
                         {
                             var newMove = tempMove.AddCheckerMoveOld(checkerMove);
+                            //Console.WriteLine("Adding move: " + newMove.ToString());
                             tempMovesWithBoards.Add((newMove, board, newSearchFrom));
                         }
                     }
@@ -736,6 +814,7 @@ namespace Backgammon.Models
                 }
                 //This assignment should be forgotten after return so feels as bad code
                 movesWithBoards = tempMovesWithBoards;
+                //Console.WriteLine("tempMovesWithBoards: " + movesWithBoards.Count);
             }
 
             if (movesWithBoards.Count == 0)
@@ -756,8 +835,9 @@ namespace Backgammon.Models
             var (movesWithBoards, complete) = GenerateLegalMovesHelper(movesWithBoardsInit, new List<int> { die1, die2 }, player);
 
             // Generate moves for die2 followed by die1, with increment search_from to avoid duplicates
+            // incSearchFrom = true will avoid making two two checker, moves from the same point , no need to do it again
+            // As an example if we already have added 15/13 15/12 we don't need to now add 15/13 15/12
             var (movesWithBoardsReversed, completeReversed) = GenerateLegalMovesHelper(movesWithBoardsInit, new List<int> { die2, die1 }, player, true);
-
             List<(Move move, int[] board, int searchFrom)> legalMoves;
             if (complete && completeReversed)
             {
@@ -778,7 +858,6 @@ namespace Backgammon.Models
                 legalMoves = movesWithBoards;
                 legalMoves.AddRange(movesWithBoardsReversed);
             }
-
             return legalMoves;
         }
 
@@ -831,7 +910,6 @@ namespace Backgammon.Models
                     uniqueBoards.Add(candidate);
                 }
             }
-
             return uniqueBoards;
         }
 
@@ -846,6 +924,10 @@ namespace Backgammon.Models
         }
 
         // Static method to generate all legal moves based on the dice rolls and player
+        // When two moves results in the same board state there is no need for ai to evaluate same pos twice
+        // For instance lets say you roll 6 3 and you can move 21/18 18/12 or 21/15 15/12 we would get the same final position
+        // unless we also hit our opponent
+        
         public static List<(Move move, int[] board)> GenerateLegalMovesStatic(int[] boardAsPoints, int die1, int die2, int player, bool removeDuplicates = true)
         {
             List<(Move move, int[] board, int searchFrom)> legalMoves;
@@ -873,7 +955,7 @@ namespace Backgammon.Models
             return GenerateLegalMovesStatic(this.Position, die1, die2, player, removeDuplicates);
         }
 
-        public static bool isValidCheckerMove(List<Move> validMoves, List<CheckerMove> currentMove, CheckerMove candidate)
+        /*public static bool isValidCheckerMove(List<Move> validMoves, List<CheckerMove> currentMove, CheckerMove candidate)
         {
             // Combine currentMove and candidate into a single list
             var extendedMove = new List<CheckerMove>(currentMove) { candidate };
@@ -883,6 +965,32 @@ namespace Backgammon.Models
                 extendedMove.All(checkerMove =>
                     validMove.CheckerMoves.Any(validCheckerMove =>
                         validCheckerMove.From == checkerMove.From && validCheckerMove.To == checkerMove.To)));
+        }*/
+        
+        public static bool isValidCheckerMove(List<Move> validMoves, List<CheckerMove> currentMove, CheckerMove candidate)
+        {
+            var extendedMove = new List<CheckerMove>(currentMove) { candidate };
+            Console.WriteLine("extendedMove: " + string.Join(", ", extendedMove));
+            foreach (var validMove in validMoves)
+            {
+                if (IsSubSet(extendedMove, validMove.CheckerMoves))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool IsSubSet(List<CheckerMove> candidate, List<CheckerMove> validSet)
+        {
+            foreach (var move in candidate)
+            {
+                bool found = validSet.Any(validMove =>
+                    validMove.From == move.From && validMove.To == move.To);
+                if (!found)
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -1134,7 +1242,6 @@ namespace Backgammon.Models
             }
             return player1BackgamePoints >= 2 || player2BackgamePoints >= 2;
         }
-
 
         //
         public static bool IsCrunched(int[] position)
