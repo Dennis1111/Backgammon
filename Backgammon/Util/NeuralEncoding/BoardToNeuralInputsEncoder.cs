@@ -1,6 +1,8 @@
 ﻿using static Backgammon.Util.Constants;
 using static Backgammon.Models.BackgammonBoard;
 using static Backgammon.Util.NeuralEncoding.BearOffVsContactNeuralEncoder;
+using static Backgammon.Analysis.BoardFeatures;
+
 namespace Backgammon.Util.NeuralEncoding
 {
     public static class BoardToNeuralInputsEncoder

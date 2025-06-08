@@ -7,6 +7,8 @@ using Serilog;
 using System.Diagnostics;
 using static Backgammon.Util.Constants;
 using static Backgammon.Models.BackgammonBoard;
+using static Backgammon.Analysis.BoardClassifier;
+using static Backgammon.Analysis.BoardFeatures;
 using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.GamePlay

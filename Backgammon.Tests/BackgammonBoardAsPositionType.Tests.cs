@@ -2,6 +2,7 @@
 using Backgammon.Util;
 using static Backgammon.Models.BackgammonBoard;
 using static Backgammon.Util.Constants.PositionType;
+using static Backgammon.Analysis.BoardClassifier;
 namespace Backgammon.Tests
 {
     [TestFixture]

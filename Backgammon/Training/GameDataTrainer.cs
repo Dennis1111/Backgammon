@@ -6,6 +6,7 @@ using Backgammon.Utils;
 using Serilog;
 using static Backgammon.Util.Constants;
 using static Backgammon.Models.BackgammonBoard;
+using static Backgammon.Analysis.BoardClassifier;
 using Backgammon.Util.NeuralEncoding;
 
 namespace Backgammon.Training

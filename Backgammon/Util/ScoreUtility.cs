@@ -3,6 +3,7 @@ using Backgammon.Models.NeuralNetwork;
 using Backgammon.Util.AI;
 using static Backgammon.Util.Constants;
 using Backgammon.Util.NeuralEncoding;
+using static Backgammon.Analysis.BoardClassifier;
 
 namespace Backgammon.Utils
 {
@@ -15,14 +16,11 @@ namespace Backgammon.Utils
             // if gameEnded is not provided as arg we need to check it
             if (gameEnded || BackgammonBoard.GameEndedStatic(position))
             {
-                var gameEndedEval = BackgammonBoard.ScoreAsVector(position);
-                return gameEndedEval;
+                return BackgammonBoard.ScoreAsVector(position);
             }
             
-            var positionType = BackgammonBoard.MapBoardToPositionType(position, player);
-            var evaluation = _positionEvaluators[positionType].Evaluate(position, player);
-            
-            return evaluation;
+            var positionType = MapBoardToPositionType(position, player);
+            return _positionEvaluators[positionType].Evaluate(position, player);
         }
 
         public static float[] EvaluatePosition(int[] board, int player, NeuralNetwork[] neuralNetworks, float clampMin, float clampMax, bool gameEnded = false, bool debug = false) {
@@ -36,10 +34,7 @@ namespace Backgammon.Utils
             // if gameEnded is not provided as arg we need to check it
             if (gameEnded || BackgammonBoard.GameEndedStatic(board))
             {
-                var gameEndedEval = BackgammonBoard.ScoreAsVector(board);
-                //gameEndedEval = gameEndedEval.Select(score => Math.Clamp(score, clampMin, clampMax)).ToArray();
-                //_trainLogger.Information("Game Ended score" + string.Join(", ", gameEndedEval));
-                return gameEndedEval;
+                return BackgammonBoard.ScoreAsVector(board);
             }
 
             if (BearOffUtility.IsBearOffPosition(board)) {
@@ -114,9 +109,7 @@ namespace Backgammon.Utils
             float equityP2 = adjustedProbs[3] + 2 * adjustedProbs[4] + 3 * adjustedProbs[5];
 
             // Net equity might be the difference or another function of the two equities
-            float netEquity = equityP1 - equityP2;
-
-            return netEquity;
+            return equityP1 - equityP2;
         }
 
         // If sigmoid activation function clampmin clampmax is not needed as the range is already 0-1
@@ -160,8 +153,7 @@ namespace Backgammon.Utils
             // Ensure the score array has exactly 6 elements
             if (score.Length == 6)
             {
-                float[] mirroredScore =
-                [
+                return [
                     // Rearrange the elements to mirror the score
                     score[3],
                     score[4],
@@ -170,7 +162,6 @@ namespace Backgammon.Utils
                     score[1],
                     score[2],
                 ];
-                return mirroredScore;
             }
             else
             {
