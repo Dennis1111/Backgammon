@@ -50,7 +50,7 @@ namespace Backgammon.Models.NeuralNetwork
             Save(DetfaultfilePath);
         }
 
-        public void SetInputLabels(string[] inputLabels)
+        public void SetInputLabels(string[]? inputLabels)
         {
             _inputLabels = inputLabels;
         }

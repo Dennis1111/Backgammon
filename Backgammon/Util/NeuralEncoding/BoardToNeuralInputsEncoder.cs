@@ -2,11 +2,14 @@
 using static Backgammon.Models.BackgammonBoard;
 using static Backgammon.Util.NeuralEncoding.BearOffVsContactNeuralEncoder;
 using static Backgammon.Analysis.BoardFeatures;
+using System.Reflection.Emit;
 
 namespace Backgammon.Util.NeuralEncoding
 {
     public static class BoardToNeuralInputsEncoder
     {
+        //It can be useful to have labels for the neural inputs to inspect which labels are relevant for the neural network
+        public static bool UseLabelsMode { get; set; } = false;
         internal static readonly float inputMin = -1;
         internal static readonly float inputMax = 1;
         // Combinations to enter with one checker from the bar with N open points
@@ -27,7 +30,7 @@ namespace Backgammon.Util.NeuralEncoding
             return stillContact ? 1 : 0;
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBoardToNeuralInputs(int[] positionToEncode, PositionType positionType, int player = Player1, bool alwaysMirror = false)
+        public static (float[] neuralInputs, string[]? labels) EncodeBoardToNeuralInputs(int[] positionToEncode, PositionType positionType, int player = Player1, bool alwaysMirror = false)
         {
             var position = positionToEncode;
             if (alwaysMirror || MirrorBoardForPlayer2 && player == Player2)
@@ -40,12 +43,12 @@ namespace Backgammon.Util.NeuralEncoding
                 case PositionType.BearOffVs1Point:
                     return EncodeBearOffVs1PointToNeuralInputs(position);
                 case PositionType.BearOffVs1PointDefence:
-                    return EncodeBearOffVs1PointDefenceToNeuralInputs(position);
+                    return EncodeBearOffVs1PointDefenseToNeuralInputs(position);
                 case PositionType.BearOffContact:
                     return EncodeBearOffVs1PointToNeuralInputs(position);
                 case PositionType.BearOffContactDefence:
-                    return EncodeBearOffVs1PointDefenceToNeuralInputs(position);
-                
+                    return EncodeBearOffVs1PointDefenseToNeuralInputs(position);
+
                 case PositionType.BearOff:
                     return EncodeNoContactBoardToNeuralInputs(position);
                 case PositionType.NoContact:
@@ -67,7 +70,7 @@ namespace Backgammon.Util.NeuralEncoding
             }
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBoardToNeuralInputs(int[] position, int modelIndex, int player = Player1, bool alwaysMirror = false)
+        public static (float[] neuralInputs, string[]? labels) EncodeBoardToNeuralInputs(int[] position, int modelIndex, int player = Player1, bool alwaysMirror = false)
         {
             if (alwaysMirror || MirrorBoardForPlayer2 && player == Player2)
             {
@@ -79,9 +82,9 @@ namespace Backgammon.Util.NeuralEncoding
                 : EncodeContactGameToNeuralInputs(position);
         }
 
-        
 
-        public static (float[] neuralInputs, string[] labels) EncodeContactGameToNeuralInputs(int[] position)
+
+        public static (float[] neuralInputs, string[]? labels) EncodeContactGameToNeuralInputs(int[] position)
         {
             (int p1PipCount, int p2PipCount) = PipCountStatic(position);
             (int p1PipCountBackGame, int p2PipCountBackGame) = PipCountBackgameTiming(position);
@@ -93,7 +96,7 @@ namespace Backgammon.Util.NeuralEncoding
             var (primeP2, primeStartsAtP2) = CountPrimes(position, Player2);
 
             var maxPercentageCut = 0.3f;
-            var encodedData = new List<(float[], string[])>
+            var encodedData = new List<(float[], string[]?)>
             {
                 //Put the non binary inputs first ordered by how often they change
                 EncodePipCountPercentageNeuralInputs(p1PipCount, p2PipCount, maxPercentageCut),
@@ -137,21 +140,22 @@ namespace Backgammon.Util.NeuralEncoding
 
             var combinedFeatures = new List<float>();
             var combinedLabels = new List<string>();
-
             foreach (var (features, labels) in encodedData)
             {
                 combinedFeatures.AddRange(features);
-                combinedLabels.AddRange(labels);
+                if (labels!=null) {
+                    combinedLabels.AddRange(labels);
+                }
             }
-
-            return (combinedFeatures.ToArray(), combinedLabels.ToArray());
+            
+            return ([.. combinedFeatures], [.. combinedLabels]);
         }
 
-        internal static (float[] neuralInputs, string[] labels) EncodeNoContactBoardToNeuralInputs(int[] position)
+        internal static (float[] neuralInputs, string[]? labels) EncodeNoContactBoardToNeuralInputs(int[] position)
         {
             (int p1PipCount, int p2PipCount) = PipCountStatic(position);
             var maxPercentageCut = 0.3f;
-            var encodedData = new List<(float[], string[])>
+            var encodedData = new List<(float[], string[]?)>
             {
                 EncodePipCountPercentageNeuralInputs(p1PipCount, p2PipCount, maxPercentageCut),
                 EncodeBorneOffDifferenceToNeuralInputsSparse(position),
@@ -169,14 +173,16 @@ namespace Backgammon.Util.NeuralEncoding
 
             var combinedFeatures = new List<float>();
             var combinedLabels = new List<string>();
-
             foreach (var (features, labels) in encodedData)
             {
                 combinedFeatures.AddRange(features);
-                combinedLabels.AddRange(labels);
+                if (labels != null)
+                {
+                    combinedLabels.AddRange(labels);
+                }
             }
 
-            return (combinedFeatures.ToArray(), combinedLabels.ToArray());
+            return ([.. combinedFeatures], [.. combinedLabels]);
         }
 
         private static float CutValue(float val, float min, float max)
@@ -205,7 +211,7 @@ namespace Backgammon.Util.NeuralEncoding
             return isPlayerOne ? scaledCheckers : -scaledCheckers;
         }
 
-        internal static (float[] neuralInputs, string[] labels) EncodeBoard1To24ToNeuralInputs(int[] position)
+        internal static (float[] neuralInputs, string[]? labels) EncodeBoard1To24ToNeuralInputs(int[] position)
         {
             var (encodedBlots, blotLabels) = EncodeBlotsToNeuralInputs(position);
             var (encodedSafePoints, safePointLabels) = EncodeSafePoints1to24ToNeuralInputs(position);
@@ -219,51 +225,77 @@ namespace Backgammon.Util.NeuralEncoding
             combinedFeatures.AddRange(encodedSpares);
             combinedFeatures.AddRange(encodedSpares4and5);
 
-            combinedLabels.AddRange(blotLabels);
-            combinedLabels.AddRange(safePointLabels);
-            combinedLabels.AddRange(spareLabels);
-            combinedLabels.AddRange(spares4and5Labels);
-            return (combinedFeatures.ToArray(), combinedLabels.ToArray());
+            if (UseLabelsMode)
+            {
+                combinedLabels.AddRange(blotLabels);
+                combinedLabels.AddRange(safePointLabels);
+                combinedLabels.AddRange(spareLabels);
+                combinedLabels.AddRange(spares4and5Labels);
+                return ([.. combinedFeatures], combinedLabels.ToArray());
+            }
+            else
+            {
+                return ([.. combinedFeatures], null);
+            }
         }
 
-        private static (float[] neuralInputs, string[] labels) EncodeBlotsToNeuralInputs(int[] position)
+        private static (float[] neuralInputs, string[]? labels) EncodeBlotsToNeuralInputs(int[] position)
         {
             const int NumPoints = 24;
             const int InputsPerPoint = 2;
             float[] neuralInputs = new float[NumPoints * InputsPerPoint];
-            string[] labels = new string[NumPoints * InputsPerPoint];
+
             for (int i = 0; i < NumPoints; i++)
             {
                 neuralInputs[i] = position[AcePointP1 + i] == 1 ? inputMin : inputMax;
-                labels[i] = $"Blots{i + 1}P1";
                 neuralInputs[i + NumPoints] = position[AcePointP1 + i] == -1 ? inputMin : inputMax;
-                labels[i + NumPoints] = $"Blots{i + 1}P2";
             }
-            return (neuralInputs, labels);
+
+            if (UseLabelsMode)
+            {
+                string[] labels = new string[NumPoints * InputsPerPoint];
+                for (int i = 0; i < NumPoints; i++)
+                {
+                    labels[i] = $"Blots{i + 1}P1";
+                    labels[i + NumPoints] = $"Blots{i + 1}P2";
+                }
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
+
         }
 
-        private static (float[] neuralInputs, string[] labels) EncodeSafePoints1to24ToNeuralInputs(int[] position)
+        private static (float[] neuralInputs, string[]? labels) EncodeSafePoints1to24ToNeuralInputs(int[] position)
         {
             const int NumPoints = 24;
             const int InputsPerPoint = 2;
             float[] neuralInputs = new float[NumPoints * InputsPerPoint];
-            string[] labels = new string[NumPoints * InputsPerPoint];
             for (int i = 0; i < NumPoints; i++)
             {
                 neuralInputs[i] = position[AcePointP1 + i] > 1 ? inputMin : inputMax;
-                labels[i] = $"Safe{i + 1}P1";
                 neuralInputs[i + NumPoints] = position[AcePointP1 + i] < -1 ? inputMin : inputMax;
-                labels[i + NumPoints] = $"Safe{i + 1}P2";
             }
-            return (neuralInputs, labels);
+
+            if (UseLabelsMode)
+            {
+                string[] labels = new string[NumPoints * InputsPerPoint];
+
+                for (int i = 0; i < NumPoints; i++)
+                {
+                    labels[i] = $"Safe{i + 1}P1";
+                    labels[i + NumPoints] = $"Safe{i + 1}P2";
+                }
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
         }
 
         // The rack is true when 6, 5, 4 Point is taken but I want different strenghts for 6, 5..
-        internal static (float[] neuralInputs, string[] labels) EncodeRackStrengthInputs(int[] position)
+        internal static (float[] neuralInputs, string[]? labels) EncodeRackStrengthInputs(int[] position)
         {
             const int NumPoints = 12;
             float[] neuralInputs = new float[NumPoints];
-            string[] labels = new string[NumPoints];
+
             for (int i = 0; i < 6; i++)
             {
                 if (position[SixPointP1 - i] < 2)
@@ -276,18 +308,18 @@ namespace Backgammon.Util.NeuralEncoding
                     break;
                 neuralInputs[i + 6] = inputMax;
             }
-
-            for (int i = 0; i < 6; i++)
+            if (UseLabelsMode)
             {
-                labels[i] = $"P1Rack{i + 1}";
-                labels[i + 6] = $"P2Rack{i + 1}";
+                string[] labels = new string[NumPoints];
+                for (int i = 0; i < 6; i++)
+                {
+                    labels[i] = $"P1Rack{i + 1}";
+                    labels[i + 6] = $"P2Rack{i + 1}";
+                }
+                return (neuralInputs, labels);
             }
-            /*if (neuralInputs[3] == inputMax || neuralInputs[9] == inputMax) {
-                Console.WriteLine("RACK" + string.Join(",", points));
-                Console.WriteLine("inputs" + string.Join(",", neuralInputs));
-            }*/
+            return (neuralInputs, null);
 
-            return (neuralInputs, labels);
         }
 
         /*private static float[] EncodeSparesSparseToNeuralInputs(int[] position)
@@ -307,15 +339,13 @@ namespace Backgammon.Util.NeuralEncoding
         }*/
 
         // Most of the the time there will be only 3 spares on any point so lets have some special inputs for 6 and 7 spares
-        internal static (float[], string[]) EncodeSparesToNeuralInputs(int[] position)
+        internal static (float[], string[]?) EncodeSparesToNeuralInputs(int[] position)
         {
             const int NumPoints = 24;
             const int MaxSpares = 3;
             const int InputsPerPoint = MaxSpares * 2;
 
             float[] neuralInputs = new float[NumPoints * InputsPerPoint];
-            string[] labels = new string[NumPoints * InputsPerPoint];
-
             for (int i = 0; i < NumPoints; i++)
             {
                 int sparesP1 = Math.Min(Math.Max(position[AcePointP1 + i] - 2, 0), MaxSpares);
@@ -329,20 +359,27 @@ namespace Backgammon.Util.NeuralEncoding
                 {
                     neuralInputs[i * InputsPerPoint + j + MaxSpares] = 1;
                 }
-
-                for (int j = 0; j < MaxSpares; j++)
-                {
-                    labels[i * InputsPerPoint + j] = $"P1Spares{i + 1},{j + 1}";
-                    labels[i * InputsPerPoint + j + MaxSpares] = $"P2Spares{24 - i},{j + 1}";
-                }
             }
-            return (neuralInputs, labels);
+            if (UseLabelsMode)
+            {
+                string[] labels = new string[NumPoints * InputsPerPoint];
+                for (int i = 0; i < NumPoints; i++)
+                {
+                    for (int j = 0; j < MaxSpares; j++)
+                    {
+                        labels[i * InputsPerPoint + j] = $"P1Spares{i + 1},{j + 1}";
+                        labels[i * InputsPerPoint + j + MaxSpares] = $"P2Spares{24 - i},{j + 1}";
+                    }
+                }
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
         }
 
-        internal static (float[], string[]) Encode4and5SparesInputs(int[] position)
+        internal static (float[], string[]?) Encode4and5SparesInputs(int[] position)
         {
             float[] neuralInputs = new float[4];
-            string[] labels = { "P1Spares4", "P1Spares5", "P2Spares4", "P2Spares5" };
+
 
             for (int i = 0; i < 24; i++)
             {
@@ -368,10 +405,15 @@ namespace Backgammon.Util.NeuralEncoding
                     neuralInputs[0] = 1;
                 }
             }
-            return (neuralInputs, labels);
+            string[] labels = { "P1Spares4", "P1Spares5", "P2Spares4", "P2Spares5" };
+            if (UseLabelsMode)
+            {
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
         }
 
-        internal static (float[] neuralInputs, string[] labels) EncodeBarCheckersToNeuralInputs(int[] board)
+        internal static (float[] neuralInputs, string[]? labels) EncodeBarCheckersToNeuralInputs(int[] board)
         {
             const int MaxCheckers = 6;
             float[] neuralInputs = new float[MaxCheckers * 2];
@@ -392,14 +434,17 @@ namespace Backgammon.Util.NeuralEncoding
                 neuralInputs[MaxCheckers + i] = inputMax;
             }
 
-            string[] labels = new string[MaxCheckers * 2];
-            for (int i = 0; i < MaxCheckers; i++)
+            if (UseLabelsMode)
             {
-                labels[i] = $"BarCheckersP1_{i + 1}";
-                labels[MaxCheckers + i] = $"BarCheckersP2_{i + 1}";
+                string[] labels = new string[MaxCheckers * 2];
+                for (int i = 0; i < MaxCheckers; i++)
+                {
+                    labels[i] = $"BarCheckersP1_{i + 1}";
+                    labels[MaxCheckers + i] = $"BarCheckersP2_{i + 1}";
+                }
+                return (neuralInputs, labels);
             }
-
-            return (neuralInputs, labels);
+            return (neuralInputs, null);
         }
 
         private static float ScaleDifferenceToInput(int difference, int maxAbsoluteDifference)
@@ -413,17 +458,23 @@ namespace Backgammon.Util.NeuralEncoding
             return normalizedDifference;
         }
 
-        internal static (float[] neuralInputs, string[] labels) EncodePipCountDifferenceToNeuralInputsSparse(int pipCountDifference, int maxDifference = 40)
+        internal static (float[] neuralInputs, string[]? labels) EncodePipCountDifferenceToNeuralInputsSparse(int pipCountDifference, int maxDifference = 40)
         {
             float[] neuralInputs =
             {
                 ScaleDifferenceToInput(pipCountDifference, maxDifference),
             };
-            string[] labels = { "PipCountDifference" + maxDifference };
-            return (neuralInputs, labels);
+
+            if (UseLabelsMode)
+            {
+
+                string[] labels = { "PipCountDifference" + maxDifference };
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBorneOffDifferenceToNeuralInputsSparse(int[] board)
+        public static (float[] neuralInputs, string[]? labels) EncodeBorneOffDifferenceToNeuralInputsSparse(int[] board)
         {
             const int MaxDifference = 15;
             float[] neuralInputs = new float[1];
@@ -434,40 +485,56 @@ namespace Backgammon.Util.NeuralEncoding
             int difference = p1BorneOff - p2BorneOff;
 
             neuralInputs[0] = ScaleToRangeMinus1Plus1(difference, -MaxDifference, MaxDifference);
-
-            return (neuralInputs, labels);
+            if (UseLabelsMode)
+            {
+                return (neuralInputs, labels);
+            }
+            return (neuralInputs, null);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBorneOffNeuralInputsSparse(int[] board)
+        public static (float[] neuralInputs, string[]? labels) EncodeBorneOffNeuralInputsSparse(int[] board)
         {
             int p1BorneOff = Math.Max(board[BearOffP1], 0);
             int p2BorneOff = Math.Max(-board[BearOffP2], 0);
             var p1BorneOffScaled = ScaleToRangeMinus1Plus1(p1BorneOff, 0f, 15f);
             var p2BorneOffScaled = ScaleToRangeMinus1Plus1(p2BorneOff, 0f, 15f);
-            string[] labels = { "BorneOffP1", "BorneOffP2" };
-            return (new[] { p1BorneOffScaled, p2BorneOffScaled }, labels);
+            if (UseLabelsMode)
+            {
+                string[] labels = { "BorneOffP1", "BorneOffP2" };
+                return ([p1BorneOffScaled, p2BorneOffScaled], labels);
+            }
+
+            return ([p1BorneOffScaled, p2BorneOffScaled], null);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodePipCountPercentageNeuralInputs(int pipCountP1, int pipCountP2, float maxPercentageCut)
+        public static (float[] neuralInputs, string[]? labels) EncodePipCountPercentageNeuralInputs(int pipCountP1, int pipCountP2, float maxPercentageCut)
         {
             float percentageP1 = pipCountP1 == 0 ? inputMax : CutValue((pipCountP2 - pipCountP1) / (float)pipCountP1, -maxPercentageCut, maxPercentageCut);
             percentageP1 = ScaleToRange(percentageP1, -maxPercentageCut, maxPercentageCut, -1f, 1f);
-            string[] labels = { "PipCountPercentage" };
-            return (new[] { percentageP1 }, labels);
+            if (UseLabelsMode)
+            {
+                string[] labels = { "PipCountPercentage" };
+                return ([percentageP1], labels);
+            }
+            return ([percentageP1], null);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeKeithCountPercentageNeuralInputs(int[] position, int pipCountP1, int pipCountP2, float maxPercentageCut)
+        public static (float[] neuralInputs, string[]? labels) EncodeKeithCountPercentageNeuralInputs(int[] position, int pipCountP1, int pipCountP2, float maxPercentageCut)
         {
             var (penaltyP1, penaltyP2) = KeithPenalty(position);
             pipCountP1 -= penaltyP1;
             pipCountP2 -= penaltyP2;
             float percentageP1 = pipCountP1 == 0 ? inputMax : CutValue((pipCountP2 - pipCountP1) / (float)pipCountP1, -maxPercentageCut, maxPercentageCut);
             percentageP1 = ScaleToRange(percentageP1, -maxPercentageCut, maxPercentageCut, -1f, 1f);
+            if (!UseLabelsMode)
+            {
+                return ([percentageP1], null);
+            }
             string[] labels = { "KeithCountPercentage" };
             return (new[] { percentageP1 }, labels);
         }
 
-        internal static (float[] neuralInputs, string[] labels) EncodeInnerBoardStrength(int innerBoardStrengthP1, int innerBoardStrengthP2)
+        internal static (float[] neuralInputs, string[]? labels) EncodeInnerBoardStrength(int innerBoardStrengthP1, int innerBoardStrengthP2)
         {
             var MaxInnerBoardStrength = 6;
             float[] neuralInputs = new float[MaxInnerBoardStrength * 2];
@@ -485,6 +552,10 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 neuralInputs[MaxInnerBoardStrength + i] = inputMax;
             }
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
             string[] labels = new string[MaxInnerBoardStrength * 2];
             for (int i = 0; i < MaxInnerBoardStrength; i++)
             {
@@ -494,7 +565,7 @@ namespace Backgammon.Util.NeuralEncoding
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeSafePointsToNeuralInputSparse(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeSafePointsToNeuralInputSparse(int[] position)
         {
             const int MaxSafePoints = 7;
             int safePointsP1 = CountSafePoints(position, Player1);
@@ -504,11 +575,15 @@ namespace Backgammon.Util.NeuralEncoding
                 safePointsP1 / (float)MaxSafePoints,
                 safePointsP2 / (float)MaxSafePoints,
             };
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
             string[] labels = { "SafePointsP1", "SafePointsP2" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodePrimesToNeuralInput(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodePrimesToNeuralInput(int[] position)
         {
             var (longestPrimeP1, _) = CountPrimes(position, Player1);
             var (longestPrimeP2, _) = CountPrimes(position, Player2);
@@ -524,11 +599,16 @@ namespace Backgammon.Util.NeuralEncoding
                 neuralInputs[3 + i - 4] = inputMax;
             }
 
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "PrimesP1_4", "PrimesP1_5", "PrimesP1_6", "PrimesP2_4", "PrimesP2_5", "PrimesP2_6" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBrokenPrimesToNeuralInput(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeBrokenPrimesToNeuralInput(int[] position)
         {
             var (longestBrokenPrimeP1, _) = CountBrokenPrimes(position, Player1);
             var (longestBrokenPrimeP2, _) = CountBrokenPrimes(position, Player2);
@@ -544,11 +624,16 @@ namespace Backgammon.Util.NeuralEncoding
                 neuralInputs[i] = inputMax;
             }
 
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "BrokenPrimesP1_3", "BrokenPrimesP1_4", "BrokenPrimesP1_5", "BrokenPrimesP2_3", "BrokenPrimesP2_4", "BrokenPrimesP2_5" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBlotsToNeuralInputSparse(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeBlotsToNeuralInputSparse(int[] position)
         {
             int maxCount = 10;
             int blotsP1 = Math.Min(CountBlots(position, Player1), maxCount);
@@ -559,11 +644,17 @@ namespace Backgammon.Util.NeuralEncoding
                 blotsP1 / (float)maxCount,
                 blotsP2 / (float)maxCount,
             };
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "BlotsP1", "BlotsP2" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBlotsToNeuralInput(int[] position)
+        /*public static (float[] neuralInputs, string[] labels) EncodeBlotsToNeuralInput(int[] position)
         {
             int blotsP1 = CountBlots(position, Player1);
             int blotsP2 = CountBlots(position, Player2);
@@ -584,7 +675,7 @@ namespace Backgammon.Util.NeuralEncoding
 
             string[] labels = { "BlotsP1_0", "BlotsP1_1", "BlotsP1_2", "BlotsP1_3", "BlotsP1_4", "BlotsP2_0", "BlotsP2_1", "BlotsP2_2", "BlotsP2_3", "BlotsP2_4" };
             return (neuralInputs, labels);
-        }
+        }*/
 
         public static float NormalizePipCount(int pipCount, int maxPipCount = 50)
         {
@@ -592,7 +683,7 @@ namespace Backgammon.Util.NeuralEncoding
             return clippedPipCount / (float)maxPipCount;
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeGammonSavePipCount(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeGammonSavePipCount(int[] position)
         {
             int gammonPipsPlayer1 = 0;
             int gammonPipsPlayer2 = 0;
@@ -627,11 +718,17 @@ namespace Backgammon.Util.NeuralEncoding
             int maxPipCount = 30;
             float input1 = NormalizePipCount(gammonPipsPlayer1, maxPipCount);
             float input2 = NormalizePipCount(gammonPipsPlayer2, maxPipCount);
+
+            if (!UseLabelsMode)
+            {
+                return ([input1, input2], null);
+            }
+
             string[] labels = { "GammonSavePipCountP1", "GammonSavePipCountP2" };
-            return (new[] { input1, input2 }, labels);
+            return ([input1, input2], labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBackGammonSavePipCount(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeBackGammonSavePipCount(int[] position)
         {
             bool gammonSavedPlayer1, gammonSavedPlayer2;
             (gammonSavedPlayer1, gammonSavedPlayer2) = SavedGammonForBoth(position);
@@ -666,14 +763,19 @@ namespace Backgammon.Util.NeuralEncoding
             int maxPipCount = 30;
             float input1 = NormalizePipCount(backGammonPipsPlayer1, maxPipCount);
             float input2 = NormalizePipCount(backGammonPipsPlayer2, maxPipCount);
+            if (!UseLabelsMode)
+            {
+                return ([input1, input2], null);
+            }
+
             string[] labels = { "BackGammonSavePipCountP1", "BackGammonSavePipCountP2" };
-            return (new[] { input1, input2 }, labels);
+            return ([input1, input2], labels);
         }
 
         // From the the total pipcount subtract the pipcount of the potential primed checkers in opp homeboard and on the bar
         // That should give an good estimate of how much timing we have
 
-        public static (float[] neuralInputs, string[] labels) EncodeCrunchTiming(int[] position, int pipCountP1, int pipCountP2)
+        public static (float[] neuralInputs, string[]? labels) EncodeCrunchTiming(int[] position, int pipCountP1, int pipCountP2)
         {
             int timingP1 = pipCountP1;
             for (int i = OnTheBarP1; i >= SixPointP2; i--)
@@ -704,6 +806,11 @@ namespace Backgammon.Util.NeuralEncoding
             float maxPercentageCut = 0.5f;
             (float[] timingDiffAsPercentage, _) = EncodePipCountPercentageNeuralInputs(timingP1, timingP2, maxPercentageCut);
             float[] neuralInputs = { inputTimingP1, inputTimingP2, timingDiffAsPercentage[0] };
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "CrunchTimingP1", "CrunchTimingP2", "CrunchTimingPerc" };
             return (neuralInputs, labels);
         }
@@ -718,7 +825,7 @@ namespace Backgammon.Util.NeuralEncoding
             return encoded;
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeGammonSaveCrossoverCountSparse(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeGammonSaveCrossoverCountSparse(int[] position)
         {
             int gammonCrossoversPlayer1 = 0;
             int gammonCrossoversPlayer2 = 0;
@@ -742,7 +849,7 @@ namespace Backgammon.Util.NeuralEncoding
                 }
             }
 
-            int maxCount = 10;
+            const int maxCount = 10;
             gammonCrossoversPlayer1 = Math.Min(gammonCrossoversPlayer1, maxCount);
             gammonCrossoversPlayer2 = Math.Min(gammonCrossoversPlayer2, maxCount);
 
@@ -751,6 +858,12 @@ namespace Backgammon.Util.NeuralEncoding
                 gammonCrossoversPlayer1 / (float)maxCount,
                 gammonCrossoversPlayer2 / (float)maxCount
             };
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "GammonSaveCrossoversP1", "GammonSaveCrossoversP2" };
             return (neuralInputs, labels);
         }
@@ -758,9 +871,9 @@ namespace Backgammon.Util.NeuralEncoding
         // The pipcount for the checkers outside the opponents home board should be quite valuable to determine how likely crunch will happen
         // Normally you say that the pipcount difference should be in a range like for 12backgame min 100 but then that depends also on how many checkers
         // have 'freedom' for instance with with 5 checkers in an 12 backgame we need more than 100 diff
-        public static (float[] neuralInputs, string[] labels) EncodeBackgameTiming(int pipTimingP1, int pipTimingP2)
+        public static (float[] neuralInputs, string[]? labels) EncodeBackgameTiming(int pipTimingP1, int pipTimingP2)
         {
-            int crunchTreshold = 40;
+            const int crunchTreshold = 40;
 
             // If the timing is very small (lets say > 40) the crunch has already started so I think we can treat 0-40 as quite the same
             var timingP1 = Math.Max(pipTimingP1 - crunchTreshold, 0);
@@ -775,64 +888,16 @@ namespace Backgammon.Util.NeuralEncoding
                 timingP1 / (float)maxTiming,
                 timingP2 / (float)maxTiming
             };// Should maybe scale to -1,1
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
             string[] labels = { "BackgameTimingP1", "BackgameTimingP2" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeGammonSaveCrossoverCount(int[] position)
-        {
-            int gammonCrossoversPlayer1 = 0;
-            int gammonCrossoversPlayer2 = 0;
-            bool gammonSavedPlayer1, gammonSavedPlayer2;
-
-            (gammonSavedPlayer1, gammonSavedPlayer2) = SavedGammonForBoth(position);
-
-            if (!gammonSavedPlayer2)
-            {
-                for (int i = 0; i < 19; i++)
-                {
-                    int checkersAtI = Math.Abs(position[i]);
-                    if (position[i] < 0)
-                    {
-                        gammonCrossoversPlayer2 += i <= 7 ? 3 * checkersAtI : i <= 13 ? 2 * checkersAtI : checkersAtI;
-                    }
-                }
-            }
-
-            if (!gammonSavedPlayer1)
-            {
-                for (int i = 0; i < 19; i++)
-                {
-                    int index = OnTheBarP1 - i;
-                    if (position[index] > 0)
-                    {
-                        int checkersAtI = position[index];
-                        gammonCrossoversPlayer1 += i <= 7 ? 3 * checkersAtI : i <= 13 ? 2 * checkersAtI : checkersAtI;
-                    }
-                }
-            }
-
-            int maxCount = 5;
-            float[] gammonCrossoversP1Encoded = EncodeCountAdditive(gammonCrossoversPlayer1, maxCount);
-            float[] gammonCrossoversP2Encoded = EncodeCountAdditive(gammonCrossoversPlayer2, maxCount);
-
-            float[] combinedEncodedCrossovers = new float[maxCount * 2];
-            Array.Copy(gammonCrossoversP1Encoded, 0, combinedEncodedCrossovers, 0, maxCount);
-            Array.Copy(gammonCrossoversP2Encoded, 0, combinedEncodedCrossovers, maxCount, maxCount);
-
-            string[] labels = { "GammonSaveCrossoversP1_0", "GammonSaveCrossoversP1_1", "GammonSaveCrossoversP1_2", "GammonSaveCrossoversP1_3", "GammonSaveCrossoversP1_4", "GammonSaveCrossoversP2_0", "GammonSaveCrossoversP2_1", "GammonSaveCrossoversP2_2", "GammonSaveCrossoversP2_3", "GammonSaveCrossoversP2_4" };
-            return (combinedEncodedCrossovers, labels);
-        }
-
-        public static (float[] neuralInputs, string[] labels) EncodeStillContact(int[] position)
-        {
-            var (contact, _) = StillContact(position);
-            float[] neuralInputs = { contact ? 1 : 0 };
-            string[] labels = { "StillContact" };
-            return (neuralInputs, labels);
-        }
-
-        public static (float[] neuralInputs, string[] labels) EncodeDirectHits(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeDirectHits(int[] position)
         {
             float[] neuralInputs = new float[12];
             for (int i = 0; i < neuralInputs.Length; i++)
@@ -867,11 +932,16 @@ namespace Backgammon.Util.NeuralEncoding
                 }
             }
 
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "DirectHitsP1_1", "DirectHitsP1_2", "DirectHitsP1_3", "DirectHitsP1_4", "DirectHitsP1_5", "DirectHitsP1_6", "DirectHitsP2_1", "DirectHitsP2_2", "DirectHitsP2_3", "DirectHitsP2_4", "DirectHitsP2_5", "DirectHitsP2_6" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeGammonSavedNeuralInputs(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeGammonSavedNeuralInputs(int[] position)
         {
             var (gammonSavedPlayer1, gammonSavedPlayer2) = SavedGammonForBoth(position);
             float[] neuralInputs =
@@ -879,21 +949,23 @@ namespace Backgammon.Util.NeuralEncoding
                 gammonSavedPlayer1 ? inputMin : inputMax,
                 gammonSavedPlayer2 ? inputMin : inputMax,
             };
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "GammonSavedP1", "GammonSavedP2" };
             return (neuralInputs, labels);
         }
 
-        public static (float[] neuralInputs, string[] labels) EncodeBorneOffDifferenceToNeuralInputs(int[] position)
+        public static (float[] neuralInputs, string[]? labels) EncodeBorneOffDifferenceToNeuralInputs(int[] position)
         {
             const int MaxDifference = 14; // Maximum difference to represent
             float[] neuralInputs = new float[MaxDifference * 2]; // x2 for two players
-            string[] labels = new string[MaxDifference * 2];
 
-            // Initialize all inputs to inputMin and labels appropriately
             for (int i = 0; i < neuralInputs.Length; i++)
             {
                 neuralInputs[i] = inputMin;
-                labels[i] = i < MaxDifference ? $"BorneOffDifferenceP1_{i + 1}" : $"BorneOffDifferenceP2_{i - MaxDifference + 1}";
             }
 
             // Retrieve the number of borne-off checkers for each player
@@ -920,28 +992,38 @@ namespace Backgammon.Util.NeuralEncoding
                     neuralInputs[MaxDifference + i] = inputMax; // Negative difference for Player 2
                 }
             }
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
 
+            string[] labels = new string[MaxDifference * 2];
+            for (int i = 0; i < neuralInputs.Length; i++)
+            {
+                labels[i] = i < MaxDifference ? $"BorneOffDifferenceP1_{i + 1}" : $"BorneOffDifferenceP2_{i - MaxDifference + 1}";
+            }
             return (neuralInputs, labels);
         }
 
-        internal static (float[], string[]) EncodeBoard1To24SparseToNeuralInputs(int[] position, int maxCheckersConsidered)
+        internal static (float[], string[]?) EncodeBoard1To24SparseToNeuralInputs(int[] position, int maxCheckersConsidered)
         {
             //const int MaxCheckersConsidered = 5;
 
-            const int NumPoints = 24; // 24 Boardpoints to scan
+            const int NumPoints = 24; // 24 Board points to scan
             float[] neuralInputs = new float[NumPoints * 2]; // 24 inputs representing the board state
-            //string[] labels = new string[NumPoints];
             for (int i = 0; i < NumPoints; i++)
             {
                 var checkersP1 = Math.Min(maxCheckersConsidered, Math.Max(position[i + 1], 0));
                 var checkersP2 = Math.Min(maxCheckersConsidered, Math.Max(-position[i + 1], 0));
-                //if (points[i + 1] > 0)
-                //{   // Shuld maybe replace with new scaling function
-                // Player 1's checkers
 
                 neuralInputs[i] = ScaleToRangeMinus1Plus1(checkersP1, 0, maxCheckersConsidered);
                 // Player 2's checkers, invert the sign of points since they are negative
                 neuralInputs[i + NumPoints] = ScaleToRangeMinus1Plus1(checkersP2, 0, maxCheckersConsidered);
+            }
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
             }
 
             string[] labels = new string[NumPoints * 2];
@@ -973,7 +1055,7 @@ namespace Backgammon.Util.NeuralEncoding
         // Count dead checkers if there are more than 2 checkers on 1 point we have dead checkers.
         // if 1 point is taken and 3 there are more checkers than 2 on the 2 point we we have more dead checkers..
         // Lets have 6 * 2 inputs counting max 6 dead checkers
-        public static (float[], string[]) EncodeDeadCheckers(int[] position)
+        public static (float[], string[]?) EncodeDeadCheckers(int[] position)
         {
             var maxDeadCheckers = 6;
             float[] neuralInputs = new float[maxDeadCheckers * 2]; // 24 inputs representing the board state
@@ -989,6 +1071,11 @@ namespace Backgammon.Util.NeuralEncoding
                 neuralInputs[i + maxDeadCheckers] = inputMax;
             }
 
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = new string[maxDeadCheckers * 2];
             for (int i = 0; i < maxDeadCheckers; i++)
             {
@@ -1002,7 +1089,7 @@ namespace Backgammon.Util.NeuralEncoding
         // 9 is medium danger 10 is quite big.
         // Even though 8,9,10 is most valuable I think 6 to 11 is valuable info
         // With 9,10 almost never split into blitz pos
-        public static (float[], string[]) EncodeCheckersITZ(int[] position)
+        public static (float[], string[]?) EncodeCheckersITZ(int[] position)
         {
             var inTheZoneRange = 6; // 6,7,8,9,10,11
             float[] neuralInputs = new float[inTheZoneRange * 2]; // 12 inputs representing the board state
@@ -1017,6 +1104,12 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 neuralInputs[i + inTheZoneRange] = 1;
             }
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = new string[inTheZoneRange * 2];
             for (int i = 0; i < inTheZoneRange; i++)
             {
@@ -1027,7 +1120,7 @@ namespace Backgammon.Util.NeuralEncoding
         }
 
         // Dancing probabilities
-        public static (float[], string[]) EncodeDancingProbability(int[] position, int innerBoardStrengthP1, int innerBoardStrengthP2)
+        public static (float[], string[]?) EncodeDancingProbability(int[] position, int innerBoardStrengthP1, int innerBoardStrengthP2)
         {
             //The first two values can be valuable for estimating the future even if not on the bar
             var danceProbP1 = danceProbabilities[innerBoardStrengthP2];
@@ -1037,16 +1130,18 @@ namespace Backgammon.Util.NeuralEncoding
             float currentDanceProbP1 = p1OnTheBar ? danceProbP1 : 0f;
             float currentDanceProbP2 = p2OnTheBar ? danceProbP2 : 0f;
             float[] neuralInputs = { danceProbP1, danceProbP2, currentDanceProbP1, currentDanceProbP2 };
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "danceProbP1", "danceProbP2", "CurrentDanceProbP1", "CurrentDanceProbP2" };
-            /*if (p2OnTheBar)
-            { 
-                Console.WriteLine(neuralInputs[2] + ";" + neuralInputs[3] );
-            }*/
             return (neuralInputs, labels);
         }
 
         // How likely is that we can't run when blocked by the opponent (should maybe be just one input)
-        public static (float[], string[]) EncodeLastAnchorEscapingProbability(int[] position)
+        public static (float[], string[]?) EncodeLastAnchorEscapingProbability(int[] position)
         {
             int blockingPointsForP1 = LastAnchorOrCheckerIsBlocked(position, Player1);
             int blockingPointsForP2 = LastAnchorOrCheckerIsBlocked(position, Player2);
@@ -1054,6 +1149,12 @@ namespace Backgammon.Util.NeuralEncoding
             float escapingProbP1 = danceProbabilities[blockingPointsForP1];
             float escapingProbP2 = danceProbabilities[blockingPointsForP2];
             float[] neuralInputs = { escapingProbP1, escapingProbP2 };
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "escapeProbP1", "escapeProbP2" };
 
             return (neuralInputs, labels);
@@ -1098,7 +1199,7 @@ namespace Backgammon.Util.NeuralEncoding
 
         // Splitting the back checkers often help escaping probabilities so lets find all checkers in opp home and see what numbers can be used to run
         // So returning a high probability indicates that here is no running problem, but I think if there is no checker to escape we should also treat as no running problem
-        public static (float[], string[]) EncodeTotalEscapingProbability(int[] position)
+        public static (float[], string[]?) EncodeTotalEscapingProbability(int[] position)
         {
             bool[] runningNumbersForP1 = new bool[6];
             bool checkerFoundP1 = false;
@@ -1125,6 +1226,11 @@ namespace Backgammon.Util.NeuralEncoding
             var runProbabilityP1 = checkerFoundP1 ? RunningNumbersAsProbability(runningNumbersForP1) : 1.0f;
             var runProbabilityP2 = checkerFoundP2 ? RunningNumbersAsProbability(runningNumbersForP2) : 1.0f;
             float[] neuralInputs = { runProbabilityP1, runProbabilityP2 };
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "runProbP1", "runProbP2" };
             return (neuralInputs, labels);
         }
@@ -1133,10 +1239,9 @@ namespace Backgammon.Util.NeuralEncoding
         // Amount of checkers from start of prime and 6 points backward (including spares and blots behind the prime)
         // Lets treat all checkers beyond 6 as fuel for rolling the prime
 
-        public static (float[], string[]) EncodePrimeFuelCount(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
+        public static (float[], string[]?) EncodePrimeFuelCount(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
         {
             var dontIncludeFirstCheckers = 6;
-            //var maxCount = 15;
             var primeFuelCountP1 = -dontIncludeFirstCheckers;
             for (int i = p1PrimeStartsAt; i < p1PrimeStartsAt + 6; i++)
             {
@@ -1159,6 +1264,11 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 neuralInputs[i + maxFuelCheckers] = inputMax;
             }
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = new string[maxFuelCheckers * 2];
             for (int i = 0; i < maxFuelCheckers; i++)
             {
@@ -1166,8 +1276,6 @@ namespace Backgammon.Util.NeuralEncoding
                 labels[i + maxFuelCheckers] = $"PrimeFuel{i}P2";
             }
 
-            //Console.WriteLine("PrimeFuelCountP1(>6):" + primeFuelCountP1 + " : " + primeFuelCountP2);
-            //Console.WriteLine("inputs" + string.Join(",", neuralInputs));
             return (neuralInputs, labels);
         }
 
@@ -1176,7 +1284,7 @@ namespace Backgammon.Util.NeuralEncoding
         // It might be a bit strange that if we if we from startpos play 13/10 we now have a 1prime with flexibility 3 but it can be valuable
         // for the early game also to evaluate how likely we can take the golden
 
-        public static (float[], string[]) EncodePrimeFlexibility(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
+        public static (float[], string[]?) EncodePrimeFlexibility(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
         {
             var maxFlexibility = 6;
             var primeFlexibilityP1 = 0;
@@ -1202,20 +1310,22 @@ namespace Backgammon.Util.NeuralEncoding
                 neuralInputs[i + maxFlexibility] = inputMax;
             }
 
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             var labels = new string[maxFlexibility * 2];
             for (int i = 0; i < maxFlexibility; i++)
             {
                 labels[i] = $"PrimeFlex{i}P1";
                 labels[i + maxFlexibility] = $"PrimeFlex{i}P2";
             }
-
-            //Console.WriteLine("PrimeFlexP1: " + primeFlexibilityP1 + " : " + primeFlexibilityP2);
-            //Console.WriteLine("inputs" + string.Join(",", neuralInputs));
             return (neuralInputs, labels);
         }
 
         // 3. If Front of the prime is slotted could also be valuable info        
-        public static (float[], string[]) EncodePrimeIsSlotted(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
+        public static (float[], string[]?) EncodePrimeIsSlotted(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
         {
             // Player 1
             bool slottedPrimeP1 = p1PrimeStartsAt != AcePointP1 && position[p1PrimeStartsAt - 1] == 1;
@@ -1224,9 +1334,12 @@ namespace Backgammon.Util.NeuralEncoding
                 slottedPrimeP1 ? inputMax : inputMin,
                 slottedPrimeP2 ? inputMax : inputMin
             };
-            /*if (slottedPrimeP1 || slottedPrimeP2) {
-                Console.WriteLine("slottedPrime" + slottedPrimeP1 + ", " + slottedPrimeP2+ string.Join(",", position));
-            }*/
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             string[] labels = { "slottedPrimeP1", "slottedPrimeP2" };
             return (neuralInputs, labels);
         }
@@ -1236,7 +1349,7 @@ namespace Backgammon.Util.NeuralEncoding
         // (unless recirculated or until the prime reachers those checkers).
         // When opponent needs to escape with one checker these deepcheckers also means we have fewer oufield guards
         // they hurt as double in the containment game
-        public static (float[], string[]) EncodePrimeDeepCheckers(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
+        public static (float[], string[]?) EncodePrimeDeepCheckers(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
         {
             var deepCheckersP1 = 0;
             for (int i = p1PrimeStartsAt - 2; i >= AcePointP1; i--)
@@ -1269,20 +1382,24 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 neuralInputs[i + maxDeepCheckers] = inputMax;
             }
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             var labels = new string[maxDeepCheckers * 2];
             for (int i = 0; i < maxDeepCheckers; i++)
             {
-                labels[i] = $"PrimeDeepChecke{i}P1";
+                labels[i] = $"PrimeDeepChecker{i}P1";
                 labels[i + maxDeepCheckers] = $"PrimeDeepChecker{i}P2";
             }
 
-            //Console.WriteLine("PrimeDeepCheckersP1:" + deepCheckersP1 + ":" + deepCheckersP2);
-            //Console.WriteLine("inputs"+ string.Join(",", neuralInputs));
             return (neuralInputs, labels);
         }
 
         // 3. If Front of the prime is slotted could also be valuable info        
-        public static (float[], string[]) EncodeAnchorFrontOfPrime(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
+        public static (float[], string[]?) EncodeAnchorFrontOfPrime(int[] position, int p1PrimeStartsAt, int p2PrimeStartsAt)
         {
             // Player 1
             bool P1AnchorNearP2Prime = p2PrimeStartsAt != AcePointP2 && position[p2PrimeStartsAt + 1] >= 2;
@@ -1292,16 +1409,17 @@ namespace Backgammon.Util.NeuralEncoding
                 P1AnchorNearP2Prime ? inputMax : inputMin,
                 P2AnchorNearP1Prime ? inputMax : inputMin,
             };
-            /*if (P2AnchorNearP1Prime) {
-                Console.WriteLine("AnchorNearPrime" + P1AnchorNearP2Prime + ", "+ P2AnchorNearP1Prime 
-                    + string.Join(",", position));
-            }*/
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
 
             string[] labels = { "P1anchorFrontOfP2Prime", "P2AnchorFrontOfP1Prime" };
             return (neuralInputs, labels);
         }
 
-        public static (float[], string[]) EncodeCheckersInOpponentsHome(int[] position)
+        public static (float[], string[]?) EncodeCheckersInOpponentsHome(int[] position)
         {
             var maxCount = 6;
             var neuralInputs = new float[maxCount * 2];
@@ -1316,6 +1434,11 @@ namespace Backgammon.Util.NeuralEncoding
             {
                 neuralInputs[i + maxCount] = inputMax;
             }
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
             var labels = new string[maxCount * 2];
             for (int i = 0; i < maxCount; i++)
             {
@@ -1323,12 +1446,10 @@ namespace Backgammon.Util.NeuralEncoding
                 labels[i + maxCount] = $"CheckerInOppHomeBoard{i}P2";
             }
 
-            //Console.WriteLine("checkerOppHomeP1:" + checkersP1 + " : " + checkersP2);
-            //Console.WriteLine("inputs"+ string.Join(",", neuralInputs));
             return (neuralInputs, labels);
         }
 
-        public static (float[], string[]) EncodeConnectivity(int[] position)
+        public static (float[], string[]?) EncodeConnectivity(int[] position)
         {
             var longestDistanceCount = 20;// If 20 is a problem for he position it probably is makes very little diff if its longer 
             var minDistanceCount = 8;
@@ -1386,20 +1507,19 @@ namespace Backgammon.Util.NeuralEncoding
             connectivityP2 = Math.Min(connectivityP2, longestDistanceCount);
             var inputP1 = ScaleToRangeMinus1Plus1(connectivityP1, minDistanceCount, longestDistanceCount);
             var inputP2 = ScaleToRangeMinus1Plus1(connectivityP2, minDistanceCount, longestDistanceCount);
-            /*if (connectivityP1 > 8 || connectivityP2 > 8) {
-                BackgammonBoard board = new BackgammonBoard();
-                board.Position = points;
-                Console.WriteLine(board);
-                Console.WriteLine("ConnectP1: " + connectivityP1 + " ,connp2: " + connectivityP2);
-            }*/
 
             float[] inputs = { inputP1, inputP2 };
+            if (!UseLabelsMode)
+            {
+                return (inputs, null);
+            }
+
             string[] labels = { "ConnectivityP1", "ConnectivityP2" };
             return (inputs, labels);
         }
 
         // Its Valuable to get an 'advanced ' anchor between deep points  
-        internal static (float[], string[]) EncodeAnchorBetweenDeepPoint(int[] position)
+        internal static (float[], string[]?) EncodeAnchorBetweenDeepPoint(int[] position)
         {
             int deepPoint = 1000;//Just some big number
             bool player2Anchor = false;
@@ -1433,13 +1553,70 @@ namespace Backgammon.Util.NeuralEncoding
             var player1AnchorInput = player1Anchor ? inputMax : inputMin;
             var player2AnchorInput = player2Anchor ? inputMax : inputMin;
             float[] neuralInputs = { player1AnchorInput, player2AnchorInput };
-            string[] labels = { "Player1AnchorBeetween", "Player2AnchorBeetween" };
+
+            if (!UseLabelsMode)
+            {
+                return (neuralInputs, null);
+            }
+
+            string[] labels = { "Player1AnchorBetween", "Player2AnchorBetween" };
 
             return (neuralInputs, labels);
         }
-
-        
-
-  
     }
+    /*
+ * Not in use 
+public static (float[] neuralInputs, string[] labels) EncodeGammonSaveCrossoverCount(int[] position)
+{
+    int gammonCrossoversPlayer1 = 0;
+    int gammonCrossoversPlayer2 = 0;
+    bool gammonSavedPlayer1, gammonSavedPlayer2;
+
+    (gammonSavedPlayer1, gammonSavedPlayer2) = SavedGammonForBoth(position);
+
+    if (!gammonSavedPlayer2)
+    {
+        for (int i = 0; i < 19; i++)
+        {
+            int checkersAtI = Math.Abs(position[i]);
+            if (position[i] < 0)
+            {
+                gammonCrossoversPlayer2 += i <= 7 ? 3 * checkersAtI : i <= 13 ? 2 * checkersAtI : checkersAtI;
+            }
+        }
+    }
+
+    if (!gammonSavedPlayer1)
+    {
+        for (int i = 0; i < 19; i++)
+        {
+            int index = OnTheBarP1 - i;
+            if (position[index] > 0)
+            {
+                int checkersAtI = position[index];
+                gammonCrossoversPlayer1 += i <= 7 ? 3 * checkersAtI : i <= 13 ? 2 * checkersAtI : checkersAtI;
+            }
+        }
+    }
+
+    int maxCount = 5;
+    float[] gammonCrossoversP1Encoded = EncodeCountAdditive(gammonCrossoversPlayer1, maxCount);
+    float[] gammonCrossoversP2Encoded = EncodeCountAdditive(gammonCrossoversPlayer2, maxCount);
+
+    float[] combinedEncodedCrossovers = new float[maxCount * 2];
+    Array.Copy(gammonCrossoversP1Encoded, 0, combinedEncodedCrossovers, 0, maxCount);
+    Array.Copy(gammonCrossoversP2Encoded, 0, combinedEncodedCrossovers, maxCount, maxCount);
+
+    string[] labels = { "GammonSaveCrossoversP1_0", "GammonSaveCrossoversP1_1", "GammonSaveCrossoversP1_2", "GammonSaveCrossoversP1_3", "GammonSaveCrossoversP1_4", "GammonSaveCrossoversP2_0", "GammonSaveCrossoversP2_1", "GammonSaveCrossoversP2_2", "GammonSaveCrossoversP2_3", "GammonSaveCrossoversP2_4" };
+    return (combinedEncodedCrossovers, labels);
+}*/
+
+    /*public static (float[] neuralInputs, string[] labels) EncodeStillContact(int[] position)
+    {
+        var (contact, _) = StillContact(position);
+        float[] neuralInputs = { contact ? 1 : 0 };
+        string[] labels = { "StillContact" };
+        return (neuralInputs, labels);
+    }*/
+
 }

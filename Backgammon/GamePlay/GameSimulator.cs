@@ -390,8 +390,11 @@ namespace Backgammon.GamePlay
                             {
                                 Console.WriteLine(key + "NN" + neuralNetworkEvaluator.NeuralNetwork.Description);
                                 var (_, labels) = BoardToNeuralInputsEncoder.EncodeBoardToNeuralInputs(BackgammonPositions.BarPointMutualHoldingGame, key);
-                                neuralNetworkEvaluator.NeuralNetwork.SetInputLabels(labels);
-                                neuralNetworkEvaluator.NeuralNetwork.checkMaxFeatureRelevance();
+                                if (labels != null)
+                                {
+                                    neuralNetworkEvaluator.NeuralNetwork.SetInputLabels(labels);
+                                    neuralNetworkEvaluator.NeuralNetwork.checkMaxFeatureRelevance();
+                                }
                             }
                             catch (Exception ex) { Console.WriteLine(ex.Message); }
                         }
